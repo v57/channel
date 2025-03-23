@@ -1,5 +1,6 @@
 import type { ServerWebSocket } from "bun"
 import { Channel } from "./channel"
+import type { SubscriptionEvent } from "./events"
 export { Channel }
 
 declare module "./channel" {
@@ -10,7 +11,7 @@ declare module "./channel" {
 
 Channel.prototype.listen = function <Body>(port: number) {
   const channel = this
-  Bun.serve({
+  const ws = Bun.serve({
     port,
     hostname: '127.0.0.1',
     async fetch(req, server) {
@@ -27,11 +28,28 @@ Channel.prototype.listen = function <Body>(port: number) {
       message(ws: ServerWebSocket<Body>, message: any) {
         if (typeof message != 'string') return
         const req = JSON.parse(message)
-        channel.receive(req, (response) => {
-          ws.send(JSON.stringify(response))
+        channel.receive(req, {
+          response(body: string) {
+            ws.send(JSON.stringify(body))
+          },
+          subscribe(topic: string) {
+            ws.subscribe(topic)
+          },
+          unsubscribe(topic: string) {
+            ws.unsubscribe(topic)
+          },
+          event() {
+
+          }
         })
       },
     },
   })
+  const publisher = {
+    publish(event: SubscriptionEvent) {
+      ws.publish(event.topic, JSON.stringify(event))
+    }
+  }
+  this._events?.forEach(a => a.publishers.push(publisher))
   return channel
 }

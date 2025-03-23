@@ -4,6 +4,7 @@ export { Channel }
 
 interface ClientInterface {
   send(path: string, body?: any): Promise<any>
+  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<any>
 }
 
 declare module "./channel" {
@@ -15,14 +16,27 @@ declare module "./channel" {
 Channel.prototype.connect = function (address: string): ClientInterface {
   const ch = this
   const ws = new WebSocketClient(address)
+  let topics = new Set<string>()
+  let subscribed = new Map<string, (body: any) => void>()
+
   ws.onmessage = (message) => {
-    ch.receive(message, (body) => {
-      ws.notify(body)
+    ch.receive(message, {
+      response(body: string) {
+        ws.notify(body)
+      },
+      subscribe(topic: string) {
+        topics.add(topic)
+      },
+      unsubscribe(topic: string) {
+        topics.delete(topic)
+      },
+      event(topic: string, body: any) {
+        subscribed.get(topic)?.(body)
+      }
     })
   }
   return {
     async send(path: string, body?: any): Promise<any> {
-      console.log(`Client: ${path} ${body}`)
       return new Promise((success, failure) => {
         const id = ws.request()
         const request = ch.makeRequest(path, body, (response) => {
@@ -30,6 +44,22 @@ Channel.prototype.connect = function (address: string): ClientInterface {
             failure(response.error)
           } else {
             success(response.body)
+          }
+          ws.sent(id)
+        })
+        ws.send(id, request)
+      })
+    },
+    async subscribe(path: string, body: any, event: (body: any) => void): Promise<string> {
+      return new Promise((success, failure) => {
+        const id = ws.request()
+        const request = ch.makeSubscription(path, body, (response) => {
+          if (response.error) {
+            failure(response.error)
+          } else {
+            const topic = response.topic!
+            subscribed.set(topic, event)
+            success(topic)
           }
           ws.sent(id)
         })
