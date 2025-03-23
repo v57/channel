@@ -1,17 +1,21 @@
 import { expect, test } from "bun:test"
 import { Channel } from "./channel"
+import './client'
+import './server'
 
-const server = new Channel()
+new Channel()
   .post('hello', () => 'world')
   .post('echo', (body) => body)
+  .listen(2049)
 const client = new Channel()
+  .connect('ws://127.0.0.1:2049')
 test("/hello", async () => {
-  const response = await client.send(server, 'hello')
+  const response = await client.send('hello')
   expect(response).toBe('world')
 })
 test("/echo", async () => {
   const random = Math.random()
-  const response = await client.send(server, 'echo', random)
+  const response = await client.send('echo', random)
   expect(response).toBe(random)
 })
 test("sub/echo", async () => {

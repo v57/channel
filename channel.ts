@@ -1,29 +1,19 @@
 import { ObjectMap } from "./map"
 
 type Function = (body: any) => any | Promise<any>
+
 export class Channel {
   private id = 0
-  private requests = new Map<number, PendingRequest>()
+  requests = new Map<number, PendingRequest>()
   private postApi = new ObjectMap<string, Function>
   constructor() { }
-  fastSend(channel: Channel, path: string, body: any | undefined, response: (response: Response) => void) {
+  makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
     const id = this.id++
     const pending: PendingRequest = {
       request: { id, path, body }, response
     }
     this.requests.set(id, pending)
-    channel.receive(this, { id, path, body })
-  }
-  send(channel: Channel, path: string, body?: any): Promise<any> {
-    return new Promise((s, e) => {
-      this.fastSend(channel, path, body, (response) => {
-        if (response.error) {
-          e(response.error)
-        } else {
-          s(response.body)
-        }
-      })
-    })
+    return { id, path, body }
   }
   cancel(id: number) {
     this.requests.delete(id)
@@ -32,10 +22,14 @@ export class Channel {
     this.postApi.set(path, request)
     return this
   }
-  receive(channel: Channel, some: any) {
-    this.receiveOne(channel, some)
+  receive(some: any, response: (response: any) => void) {
+    if (Array.isArray(some)) {
+      some.forEach(a => this.receiveOne(a, response))
+    } else {
+      this.receiveOne(some, response)
+    }
   }
-  receiveOne(channel: Channel, some: any) {
+  receiveOne(some: any, response: (response: any) => void) {
     if (some.path) {
       const id: number | undefined = some.id
       const api = this.postApi.get(some.path)
@@ -45,21 +39,19 @@ export class Channel {
         if (id !== undefined) {
           if (body.then) {
             body.then((a: any) => {
-              channel.receive(this, { id, body: a })
+              response({ id, body: a })
             })
           } else {
-            channel.receive(this, { id, body })
+            response({ id, body })
           }
         }
       } catch (e) {
-        if (id !== undefined) channel.receive(this, { id, error: `${e}` })
+        if (id !== undefined) response({ id, error: `${e}` })
       }
     } else if (some.id !== undefined) {
       const request = this.requests.get(some.id)
       this.requests.delete(some.id)
-      if (request) {
-        request.response(some)
-      }
+      if (request) request.response(some)
     }
   }
 }
