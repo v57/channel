@@ -1,9 +1,10 @@
-import { Channel } from "./channel"
+import { Channel, type Response } from "./channel"
 import { ObjectMap } from "./map"
 export { Channel }
 
 interface ClientInterface {
   send(path: string, body?: any): Promise<any>
+  values(path: string, body?: any): Values
   subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<string>
   unsubscribe(topic: string): void
 }
@@ -50,6 +51,9 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
         })
         ws.send(id, request)
       })
+    },
+    values(path: string, body?: any) {
+      return new Values(ws.request(), ws, ch, path, body)
     },
     async subscribe(path: string, body: any, event: (body: any) => void): Promise<string> {
       return new Promise((success, failure) => {
@@ -117,4 +121,61 @@ export class WebSocketClient {
   sent(id: number) {
     this.pending.delete(id)
   }
+}
+class Values {
+  id: number
+  ws: WebSocketClient
+  ch: Channel
+  path: string
+  body: any | undefined
+  isRunning = false
+  pending: ((response: Response) => void)[] = []
+  queued: Response[] = []
+  constructor(id: number, ws: WebSocketClient, ch: Channel, path: string, body: any | undefined) {
+    this.id = id
+    this.ws = ws
+    this.ch = ch
+    this.path = path
+    this.body = body
+  }
+
+  private start() {
+    if (this.isRunning) return
+    this.isRunning = true
+    const request = this.ch.makeStream(this.path, this.body, (response) => {
+      const pendingPromise = this.pending.shift()
+      if (pendingPromise) {
+        pendingPromise(response)
+      } else {
+        this.queued.push(response)
+      }
+    })
+    this.ws.send(this.id, request)
+  }
+  private processResponse(response: Response): IteratorValue<any> {
+    if (response.error) throw response.error
+    return { value: response.body, done: response.done ? true : false }
+  }
+  async next(): Promise<IteratorValue<any>> {
+    const result = new Promise<IteratorValue<any>>((success, failure) => {
+      this.pending.push((value) => {
+        try {
+          success(this.processResponse(value))
+        } catch (error) {
+          failure(error)
+        }
+      })
+    })
+    this.start()
+    const value = await result
+    return value
+  }
+  [Symbol.asyncIterator]() {
+    return this
+  }
+}
+
+interface IteratorValue<T> {
+  value: T
+  done: boolean
 }

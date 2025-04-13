@@ -7,9 +7,20 @@ import './server'
 const events = {
   hello: new Subscription()
 }
+
+async function sleep(seconds: number = 0.001) {
+  await new Promise((resolve) => { setTimeout(resolve, seconds * 1000) })
+}
+
 new Channel()
   .post('hello', () => 'world')
   .post('echo', (body) => body)
+  .stream('stream/values', async function* () {
+    for (let i = 0; i < 3; i += 1) {
+      yield i
+      await sleep()
+    }
+  })
   .events(Subscription.parse(events))
   .listen(2049)
 const client = new Channel()
@@ -32,7 +43,7 @@ test("sub/hello", async () => {
   })
   events.hello.send('test', 'event 1')
   events.hello.send('test', 'event 2')
-  await new Promise((resolve) => { setTimeout(resolve, 1) }) // escaping the event loop
+  await sleep()
   expect(count).toBe(2)
 })
 test("sub/hello", async () => {
@@ -43,13 +54,17 @@ test("sub/hello", async () => {
     expect(event).toContain('event ')
   })
   events.hello.send('test', 'event 1')
-  await new Promise((resolve) => { setTimeout(resolve, 1) })
+  await sleep()
   client.unsubscribe(topic)
-  await new Promise((resolve) => { setTimeout(resolve, 1) })
+  await sleep()
   events.hello.send('test', 'event 2')
-  await new Promise((resolve) => { setTimeout(resolve, 1) })
+  await sleep()
   expect(count).toBe(1)
 })
-test("/progress", async () => {
-
+test("/stream", async () => {
+  let a = 0
+  for await (const value of client.values('stream/values')) {
+    expect(value).toBe(a)
+    a += 1
+  }
 })
