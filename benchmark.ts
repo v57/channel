@@ -1,16 +1,7 @@
 import { Channel } from "./channel"
 import './client'
 import './server'
-import { Subscription } from "./events"
 import type { ClientInterface } from "./client"
-
-const events = {
-  hello: new Subscription()
-}
-
-async function sleep(seconds: number) {
-  await new Promise((resolve) => { setTimeout(resolve, seconds * 1000) })
-}
 
 interface TestingInfo {
   isCancelled: boolean
@@ -42,7 +33,6 @@ async function run(client: ClientInterface, info: TestingInfo, ops: number = 100
   }
 }
 
-
 await startTest('1 thread', async (client, info) => {
   await run(client, info, 1_000_000)
 })
@@ -58,3 +48,10 @@ await startTest('1000 threads', async (client, info) => {
 await startTest('10000 threads', async (client, info) => {
   await Promise.all(Array.from({ length: 10000 }, () => run(client, info)))
 })
+/*
+51 809 ops 1 thread
+200 066 ops 10 threads
+308 059 ops 100 threads
+293 000 ops 1000 threads
+244 842 ops 10000 threads
+*/
