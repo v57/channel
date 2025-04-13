@@ -2,11 +2,12 @@ import { Channel, type Response } from "./channel"
 import { ObjectMap } from "./map"
 export { Channel }
 
-interface ClientInterface {
+export interface ClientInterface {
   send(path: string, body?: any): Promise<any>
   values(path: string, body?: any): Values
   subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<string>
   unsubscribe(topic: string): void
+  stop(): void
 }
 
 declare module "./channel" {
@@ -74,6 +75,9 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
     unsubscribe(topic: string): void {
       subscribed.delete(topic)
       ws.notify({ unsub: topic })
+    },
+    stop() {
+      ws.stop()
     }
   }
 }
@@ -106,6 +110,9 @@ export class WebSocketClient {
         this.onmessage?.(value)
       }
     }
+  }
+  stop() {
+    this.ws?.close()
   }
   request(): number {
     return this.id++
