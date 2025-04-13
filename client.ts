@@ -68,7 +68,7 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
       })
     },
     unsubscribe(topic: string): void {
-      // subscribed.delete(topic)
+      subscribed.delete(topic)
       ws.notify({ unsub: topic })
     }
   }

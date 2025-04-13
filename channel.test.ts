@@ -24,8 +24,6 @@ test("/echo", async () => {
   expect(response).toBe(random)
 })
 test("sub/hello", async () => {
-  console.log(await client.send('hello'))
-  console.log(await client.send('echo', 200))
   events.hello.send('test', 'event 0')
   let count = 0
   await client.subscribe('hello', 'test', (event) => {
@@ -36,6 +34,21 @@ test("sub/hello", async () => {
   events.hello.send('test', 'event 2')
   await new Promise((resolve) => { setTimeout(resolve, 1) }) // escaping the event loop
   expect(count).toBe(2)
+})
+test("sub/hello", async () => {
+  events.hello.send('test', 'event 0')
+  let count = 0
+  const topic = await client.subscribe('hello', 'test', (event) => {
+    count += 1
+    expect(event).toContain('event ')
+  })
+  events.hello.send('test', 'event 1')
+  await new Promise((resolve) => { setTimeout(resolve, 1) })
+  client.unsubscribe(topic)
+  await new Promise((resolve) => { setTimeout(resolve, 1) })
+  events.hello.send('test', 'event 2')
+  await new Promise((resolve) => { setTimeout(resolve, 1) })
+  expect(count).toBe(1)
 })
 test("/progress", async () => {
 
