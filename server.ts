@@ -1,15 +1,15 @@
-import type { ServerWebSocket } from "bun"
+import type { ServerWebSocket, Server } from "bun"
 import { Channel } from "./channel"
 import type { SubscriptionEvent } from "./events"
 export { Channel }
 
 declare module "./channel" {
   interface Channel {
-    listen(port: number): void
+    listen(port: number): Server
   }
 }
 
-Channel.prototype.listen = function <Body>(port: number) {
+Channel.prototype.listen = function <Body>(port: number): Server {
   const channel = this
   const ws = Bun.serve({
     port,
@@ -51,5 +51,5 @@ Channel.prototype.listen = function <Body>(port: number) {
     }
   }
   this._events?.forEach(a => a.publishers.push(publisher))
-  return channel
+  return ws
 }
