@@ -33,16 +33,16 @@ new Channel()
   .listen(2049)
 const client = new Channel()
   .connect(2049)
-test("/hello", async () => {
+test("post/hello", async () => {
   const response = await client.send('hello')
   expect(response).toBe('world')
 })
-test("/echo", async () => {
+test("post/echo", async () => {
   const random = Math.random()
   const response = await client.send('echo', random)
   expect(response).toBe(random)
 })
-test("sub/hello", async () => {
+test("events", async () => {
   events.hello.send('test', 'event 0')
   let count = 0
   await client.subscribe('hello', 'test', (event) => {
@@ -54,7 +54,7 @@ test("sub/hello", async () => {
   await sleep()
   expect(count).toBe(2)
 })
-test("sub/hello", async () => {
+test("events/cancel", async () => {
   events.hello.send('test', 'event 0')
   let count = 0
   const topic = await client.subscribe('hello', 'test', (event) => {
@@ -69,14 +69,14 @@ test("sub/hello", async () => {
   await sleep()
   expect(count).toBe(1)
 })
-test("/stream", async () => {
+test("stream", async () => {
   let a = 0
   for await (const value of client.values('stream/values')) {
     expect(value).toBe(a)
     a += 1
   }
 })
-test("/stream/cancel", async () => {
+test("stream/cancel", async () => {
   let a = 0
   valuesSent = 0
   for await (const value of client.values('stream/cancel')) {
