@@ -21,6 +21,7 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
   const ws = new WebSocketClient(typeof address === 'string' ? address : `ws://localhost:${address}`)
   let topics = new Set<string>()
   let subscribed = new Map<string, (body: any) => void>()
+  let isWaiting = false
 
   ws.onmessage = (message) => {
     ch.receive(message, {
@@ -48,7 +49,6 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
           } else {
             success(response.body)
           }
-          ws.sent(id)
         })
         ws.send(id, request)
       })
