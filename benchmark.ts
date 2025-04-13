@@ -21,7 +21,7 @@ async function startTest(name: string, test: (client: ClientInterface, info: Tes
   }, 500)
   await test(client, info)
   const ops = Math.floor(count / ((Bun.nanoseconds() - start) / 1_000_000_000))
-  const formatted = new Intl.NumberFormat('fr-FR').format(ops);
+  const formatted = new Intl.NumberFormat('en-US').format(ops);
   console.log(formatted.padStart(9, ' '), 'ops', name)
   client.stop()
   server.stop()
@@ -49,9 +49,9 @@ await startTest('10000 threads', async (client, info) => {
   await Promise.all(Array.from({ length: 10000 }, () => run(client, info)))
 })
 /*
-51 809 ops 1 thread
-200 066 ops 10 threads
-308 059 ops 100 threads
-293 000 ops 1000 threads
-244 842 ops 10000 threads
+51,668 ops 1 thread
+200,081 ops 10 threads
+313,227 ops 100 threads
+312,440 ops 1000 threads
+263,569 ops 10000 threads
 */
