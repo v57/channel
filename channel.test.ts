@@ -12,12 +12,20 @@ async function sleep(seconds: number = 0.001) {
   await new Promise((resolve) => { setTimeout(resolve, seconds * 1000) })
 }
 
+let valuesSent = 0
 new Channel()
   .post('hello', () => 'world')
   .post('echo', (body) => body)
   .stream('stream/values', async function* () {
     for (let i = 0; i < 3; i += 1) {
       yield i
+      await sleep()
+    }
+  })
+  .stream('stream/cancel', async function* () {
+    for (let i = 0; i < 10; i += 1) {
+      yield i
+      valuesSent += 1
       await sleep()
     }
   })
@@ -67,4 +75,14 @@ test("/stream", async () => {
     expect(value).toBe(a)
     a += 1
   }
+})
+test("/stream/cancel", async () => {
+  let a = 0
+  valuesSent = 0
+  for await (const value of client.values('stream/cancel')) {
+    expect(value).toBe(a)
+    a += 1
+    if (value === 2) break
+  }
+  expect(valuesSent).toBe(3)
 })
