@@ -34,7 +34,7 @@ async function run(client: ClientInterface, info: TestingInfo, ops: number = 100
 }
 
 await startTest('1 thread', async (client, info) => {
-  await run(client, info, 1_000_000)
+  await run(client, info, 100_000)
 })
 await startTest('10 threads', async (client, info) => {
   await Promise.all(Array.from({ length: 10 }, () => run(client, info)))
@@ -49,6 +49,13 @@ await startTest('10000 threads', async (client, info) => {
   await Promise.all(Array.from({ length: 10000 }, () => run(client, info)))
 })
 /*
+// dcp
+52,478 ops 1 thread
+198,796 ops 10 threads
+303,340 ops 100 threads
+301,064 ops 1000 threads
+848,467 ops 10000 threads
+
 // socket.io websocket
 39,941 ops 1 thread
 126,786 ops 10 threads
@@ -62,11 +69,4 @@ await startTest('10000 threads', async (client, info) => {
 31,962 ops 100 threads
 205,788 ops 1000 threads
 388,935 ops 10000 threads
-
-// dcp
-52,087 ops 1 thread
-246,481 ops 10 threads
-452,683 ops 100 threads
-497,923 ops 1000 threads
-447,218 ops 10000 threads
 */

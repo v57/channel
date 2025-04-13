@@ -21,7 +21,6 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
   const ws = new WebSocketClient(typeof address === 'string' ? address : `ws://localhost:${address}`)
   let topics = new Set<string>()
   let subscribed = new Map<string, (body: any) => void>()
-  let isWaiting = false
 
   ws.onmessage = (message) => {
     ch.receive(message, {
@@ -89,6 +88,9 @@ export class WebSocketClient {
   onopen: (() => void) | undefined
   onmessage: ((message: any) => void) | undefined
   pending = new ObjectMap<number, any>()
+  private isWaiting = 0
+  private isWaitingLength = 0
+  queue: any[] = []
   constructor(address: string) {
     this.address = address
     this.start()
@@ -112,6 +114,7 @@ export class WebSocketClient {
     }
   }
   stop() {
+    this.pending = new ObjectMap()
     this.ws?.close()
   }
   request(): number {
@@ -119,7 +122,36 @@ export class WebSocketClient {
   }
   send(id: number, body: any): number {
     this.pending.set(id, body)
-    this.ws?.send(JSON.stringify(body))
+    if (!this.ws) { return id }
+    switch (this.isWaiting) {
+      case 0:
+        this.ws.send(JSON.stringify(body))
+        this.isWaiting = 1
+        this.isWaitingLength = 0
+        setTimeout(() => {
+          if (this.isWaitingLength > 4000) {
+            this.isWaiting = 3
+          }
+        }, 10)
+        break
+      case 1:
+        this.ws.send(JSON.stringify(body))
+        this.isWaitingLength += 1
+        break
+      case 2:
+        this.queue.push(body)
+        break
+      case 3:
+        this.ws.send(JSON.stringify(body))
+        this.isWaiting = 2
+        setTimeout(() => {
+          this.isWaiting = 3
+          if (this.queue.length) {
+            this.ws?.send(JSON.stringify(this.queue))
+            this.queue.splice(0)
+          }
+        }, 1)
+    }
     return id
   }
   notify(body: any) {
