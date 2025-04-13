@@ -86,6 +86,8 @@ export class Channel {
       } catch (e) {
         if (id !== undefined) controller.response({ id, error: `${e}` })
       }
+    } else if (some.unsub) {
+      controller.unsubscribe(some.unsub)
     } else if (some.topic) {
       if (some.id !== undefined) {
         const request = this.requests.get(some.id)

@@ -4,7 +4,8 @@ export { Channel }
 
 interface ClientInterface {
   send(path: string, body?: any): Promise<any>
-  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<any>
+  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<string>
+  unsubscribe(topic: string): void
 }
 
 declare module "./channel" {
@@ -65,6 +66,10 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
         })
         ws.send(id, request)
       })
+    },
+    unsubscribe(topic: string): void {
+      // subscribed.delete(topic)
+      ws.notify({ unsub: topic })
     }
   }
 }
@@ -107,7 +112,7 @@ export class WebSocketClient {
     return id
   }
   notify(body: any) {
-    this.ws?.send(body)
+    this.ws?.send(JSON.stringify(body))
   }
   sent(id: number) {
     this.pending.delete(id)

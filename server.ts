@@ -26,7 +26,7 @@ Channel.prototype.listen = function <Body>(port: number) {
 
       },
       message(ws: ServerWebSocket<Body>, message: any) {
-        if (typeof message != 'string') return
+        if (typeof message !== 'string') return
         const req = JSON.parse(message)
         channel.receive(req, {
           response(body: string) {
