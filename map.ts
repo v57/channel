@@ -1,20 +1,17 @@
 
 export class ObjectMap<Key, Value> {
   private storage: any = {}
-  count = 0
+  size = 0
   get(id: Key): Value | undefined {
     return this.storage[id]
   }
   set(id: Key, value: Value) {
-    this.count += 1
+    this.size += 1
     this.storage[id] = value
   }
   delete(id: Key) {
-    this.count -= 1
+    this.size -= 1
     delete this.storage[id]
-  }
-  get size(): number {
-    return this.count
   }
   map<O>(transform: (value: Value) => O): O[] {
     let array: O[] = []
