@@ -8,7 +8,7 @@ new Channel()
   .post('echo', (body) => body)
   .listen(2049)
 const client = new Channel()
-  .connect('ws://127.0.0.1:2049')
+  .connect(2049)
 test("/hello", async () => {
   const response = await client.send('hello')
   expect(response).toBe('world')

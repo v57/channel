@@ -9,13 +9,13 @@ interface ClientInterface {
 
 declare module "./channel" {
   interface Channel {
-    connect(address: string): ClientInterface
+    connect(address: string | number): ClientInterface
   }
 }
 
-Channel.prototype.connect = function (address: string): ClientInterface {
+Channel.prototype.connect = function (address: string | number): ClientInterface {
   const ch = this
-  const ws = new WebSocketClient(address)
+  const ws = new WebSocketClient(typeof address === 'string' ? address : `ws://localhost:${address}`)
   let topics = new Set<string>()
   let subscribed = new Map<string, (body: any) => void>()
 
