@@ -131,6 +131,7 @@ class Values {
   isRunning = false
   pending: ((response: Response) => void)[] = []
   queued: Response[] = []
+  rid: number | undefined
   constructor(id: number, ws: WebSocketClient, ch: Channel, path: string, body: any | undefined) {
     this.id = id
     this.ws = ws
@@ -150,6 +151,7 @@ class Values {
         this.queued.push(response)
       }
     })
+    this.rid = request.id
     this.ws.send(this.id, request)
   }
   private processResponse(response: Response): IteratorValue<any> {
@@ -169,6 +171,14 @@ class Values {
     this.start()
     const value = await result
     return value
+  }
+  async return() {
+    this.cancel()
+    return { value: undefined, done: true }
+  }
+  private cancel() {
+    if (this.rid === undefined) return
+    this.ws.send(this.id, { cancel: this.rid })
   }
   [Symbol.asyncIterator]() {
     return this

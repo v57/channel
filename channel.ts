@@ -16,6 +16,7 @@ export class Channel {
   requests = new Map<number, PendingRequest>()
   private postApi = new ObjectMap<string, Function>
   private streamApi = new ObjectMap<string, Stream>
+  private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>
   _events?: Map<string, Subscription>
   constructor() { }
   makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
@@ -85,6 +86,10 @@ export class Channel {
       if (!api) throw 'api not found'
       if (id === undefined) throw 'stream requires id'
       this.streamRequest(id, controller, some.body, api)
+    } else if (some.cancel !== undefined) {
+      const id: number | undefined = some.cancel
+      if (id === undefined) throw 'stream requires id'
+      this.streams.get(id)?.return()
     } else if (some.sub) {
       const id: number | undefined = some.id
       const subscription = this._events?.get(some.sub)
@@ -126,13 +131,16 @@ export class Channel {
   }
   private async streamRequest(id: number, controller: Controller, body: any, stream: Stream) {
     try {
-      for await (const value of stream(body)) {
+      const values = stream(body)
+      this.streams.set(id, values)
+      for await (const value of values) {
         controller.response({ id, body: value })
       }
       controller.response({ id, done: true })
     } catch (e) {
       controller.response({ id, error: `${e}` })
     }
+    this.streams.delete(id)
   }
   events(events: Map<string, Subscription>) {
     this._events = events
