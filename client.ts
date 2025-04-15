@@ -1,6 +1,7 @@
 import { Channel, type Response } from "./channel"
 import { ObjectMap } from "./map"
 export { Channel }
+import { makeSender } from "./sender"
 
 export interface ClientInterface {
   send(path: string, body?: any): Promise<any>
@@ -91,6 +92,7 @@ export class WebSocketClient {
   private isWaiting = 0
   private isWaitingLength = 0
   queue: any[] = []
+  isConnected: boolean = false
   constructor(address: string) {
     this.address = address
     this.start()
@@ -98,11 +100,13 @@ export class WebSocketClient {
   start() {
     const ws = new WebSocket(this.address)
     ws.onopen = () => {
+      this.isConnected = true
       this.ws = ws
       this.onopen?.()
       ws.send(JSON.stringify(this.pending.map(a => a)))
     }
     ws.onclose = () => {
+      this.isConnected = false
       this.ws = undefined
       setTimeout(() => this.start(), 100)
     }
@@ -153,6 +157,12 @@ export class WebSocketClient {
         }, 1)
     }
     return id
+  }
+  cancel(id: number): boolean {
+    if (this.isConnected) return false
+    if (!this.pending.get(id)) return false
+    this.pending.delete(id)
+    return true
   }
   notify(body: any) {
     this.ws?.send(JSON.stringify(body))
