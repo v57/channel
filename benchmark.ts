@@ -1,13 +1,13 @@
 import { Channel } from "./channel"
 import './client'
+import type { Sender } from "./sender"
 import './server'
-import type { ClientInterface } from "./client"
 
 interface TestingInfo {
   isCancelled: boolean
 }
 
-async function startTest(name: string, test: (client: ClientInterface, info: TestingInfo) => Promise<void>) {
+async function startTest(name: string, test: (client: Sender, info: TestingInfo) => Promise<void>) {
   const start = Bun.nanoseconds()
   let count = 0
   let info: TestingInfo = { isCancelled: false }
@@ -26,7 +26,7 @@ async function startTest(name: string, test: (client: ClientInterface, info: Tes
   client.stop()
   server.stop()
 }
-async function run(client: ClientInterface, info: TestingInfo, ops: number = 100_000) {
+async function run(client: Sender, info: TestingInfo, ops: number = 100_000) {
   for (let i = 0; i < ops; i += 1) {
     if (info.isCancelled) return
     await client.send('hello')

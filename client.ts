@@ -1,27 +1,18 @@
-import { Channel, type Response } from "./channel"
+import { Channel } from "./channel"
 import { ObjectMap } from "./map"
 export { Channel }
-import { makeSender } from "./sender"
-
-export interface ClientInterface {
-  send(path: string, body?: any): Promise<any>
-  values(path: string, body?: any): Values
-  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<string>
-  unsubscribe(topic: string): void
-  stop(): void
-}
+import { makeSender, type Sender } from "./sender"
 
 declare module "./channel" {
   interface Channel {
-    connect(address: string | number): ClientInterface
+    connect(address: string | number): Sender
   }
 }
 
-Channel.prototype.connect = function (address: string | number): ClientInterface {
+Channel.prototype.connect = function (address: string | number): Sender {
   const ch = this
-  const ws = new WebSocketClient(typeof address === 'string' ? address : `ws://localhost:${address}`)
+  const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`)
   let topics = new Set<string>()
-  let subscribed = new Map<string, (body: any) => void>()
 
   ws.onmessage = (message) => {
     ch.receive(message, {
@@ -35,48 +26,12 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
         topics.delete(topic)
       },
       event(topic: string, body: any) {
-        subscribed.get(topic)?.(body)
+        ws.subscribed.get(topic)?.(body)
       }
     })
   }
-  return {
-    async send(path: string, body?: any): Promise<any> {
-      return new Promise((success, failure) => {
-        const request = ch.makeRequest(path, body, (response) => {
-          if (response.error) {
-            failure(response.error)
-          } else {
-            success(response.body)
-          }
-        })
-        ws.send(request)
-      })
-    },
-    values(path: string, body?: any) {
-      return new Values(ch, path, body, (body) => ws.send(body), (cancel) => ws.send({ cancel }))
-    },
-    async subscribe(path: string, body: any, event: (body: any) => void): Promise<string> {
-      return new Promise((success, failure) => {
-        const request = ch.makeSubscription(path, body, (response) => {
-          if (response.error) {
-            failure(response.error)
-          } else {
-            const topic = response.topic!
-            subscribed.set(topic, event)
-            success(topic)
-          }
-        })
-        ws.send(request)
-      })
-    },
-    unsubscribe(topic: string): void {
-      subscribed.delete(topic)
-      ws.notify({ unsub: topic })
-    },
-    stop() {
-      ws.stop()
-    }
-  }
+  const sender = makeSender(ch, ws)
+  return sender
 }
 
 export class WebSocketClient {
@@ -166,70 +121,12 @@ export class WebSocketClient {
     this.pending.delete(id)
   }
 }
-class Values {
-  ch: Channel
-  path: string
-  body: any | undefined
-  isRunning = false
-  pending: ((response: Response) => void)[] = []
-  queued: Response[] = []
-  rid: number | undefined
-  onSend: (body: any) => void
-  onCancel: (id: number) => void
-  constructor(ch: Channel, path: string, body: any | undefined, onSend: (body: any) => void, onCancel: (id: number) => void) {
-    this.ch = ch
-    this.path = path
-    this.body = body
-    this.onSend = onSend
-    this.onCancel = onCancel
+class WebSocketTopics extends WebSocketClient {
+  subscribed = new Map<string, (body: any) => void>()
+  addTopic(topic: string, event: (body: any) => void): void {
+    this.subscribed.set(topic, event)
   }
-
-  private start() {
-    if (this.isRunning) return
-    this.isRunning = true
-    const request = this.ch.makeStream(this.path, this.body, (response) => {
-      const pendingPromise = this.pending.shift()
-      if (pendingPromise) {
-        pendingPromise(response)
-      } else {
-        this.queued.push(response)
-      }
-    })
-    this.rid = request.id
-    this.onSend(request)
+  removeTopic(topic: string): void {
+    this.subscribed.delete(topic)
   }
-  private processResponse(response: Response): IteratorValue<any> {
-    if (response.error) throw response.error
-    return { value: response.body, done: response.done ? true : false }
-  }
-  async next(): Promise<IteratorValue<any>> {
-    const result = new Promise<IteratorValue<any>>((success, failure) => {
-      this.pending.push((value) => {
-        try {
-          success(this.processResponse(value))
-        } catch (error) {
-          failure(error)
-        }
-      })
-    })
-    this.start()
-    const value = await result
-    return value
-  }
-  async return() {
-    this.cancel()
-    return { value: undefined, done: true }
-  }
-  private cancel() {
-    if (this.rid === undefined) return
-    this.onCancel(this.rid)
-  }
-  [Symbol.asyncIterator]() {
-    return this
-  }
-}
-
-interface IteratorValue<T> {
-  value: T
-  done: boolean
 }
