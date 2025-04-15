@@ -42,7 +42,6 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
   return {
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
-        const id = ws.request()
         const request = ch.makeRequest(path, body, (response) => {
           if (response.error) {
             failure(response.error)
@@ -50,16 +49,14 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
             success(response.body)
           }
         })
-        ws.send(id, request)
+        ws.send(request)
       })
     },
     values(path: string, body?: any) {
-      const id = ws.request()
-      return new Values(ch, path, body, (body) => ws.send(id, body), (cancel) => ws.send(id, { cancel }))
+      return new Values(ch, path, body, (body) => ws.send(body), (cancel) => ws.send({ cancel }))
     },
     async subscribe(path: string, body: any, event: (body: any) => void): Promise<string> {
       return new Promise((success, failure) => {
-        const id = ws.request()
         const request = ch.makeSubscription(path, body, (response) => {
           if (response.error) {
             failure(response.error)
@@ -69,7 +66,7 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
             success(topic)
           }
         })
-        ws.send(id, request)
+        ws.send(request)
       })
     },
     unsubscribe(topic: string): void {
@@ -121,10 +118,8 @@ export class WebSocketClient {
     this.pending = new ObjectMap()
     this.ws?.close()
   }
-  request(): number {
-    return this.id++
-  }
-  send(id: number, body: any): number {
+  send(body: any): number {
+    const id = this.id++
     this.pending.set(id, body)
     if (!this.ws) { return id }
     switch (this.isWaiting) {
