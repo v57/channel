@@ -53,7 +53,8 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
       })
     },
     values(path: string, body?: any) {
-      return new Values(ws.request(), ws, ch, path, body)
+      const id = ws.request()
+      return new Values(ch, path, body, (body) => ws.send(id, body), (cancel) => ws.send(id, { cancel }))
     },
     async subscribe(path: string, body: any, event: (body: any) => void): Promise<string> {
       return new Promise((success, failure) => {
@@ -66,7 +67,6 @@ Channel.prototype.connect = function (address: string | number): ClientInterface
             subscribed.set(topic, event)
             success(topic)
           }
-          ws.sent(id)
         })
         ws.send(id, request)
       })
@@ -162,8 +162,6 @@ export class WebSocketClient {
   }
 }
 class Values {
-  id: number
-  ws: WebSocketClient
   ch: Channel
   path: string
   body: any | undefined
@@ -171,12 +169,14 @@ class Values {
   pending: ((response: Response) => void)[] = []
   queued: Response[] = []
   rid: number | undefined
-  constructor(id: number, ws: WebSocketClient, ch: Channel, path: string, body: any | undefined) {
-    this.id = id
-    this.ws = ws
+  onSend: (body: any) => void
+  onCancel: (id: number) => void
+  constructor(ch: Channel, path: string, body: any | undefined, onSend: (body: any) => void, onCancel: (id: number) => void) {
     this.ch = ch
     this.path = path
     this.body = body
+    this.onSend = onSend
+    this.onCancel = onCancel
   }
 
   private start() {
@@ -191,7 +191,7 @@ class Values {
       }
     })
     this.rid = request.id
-    this.ws.send(this.id, request)
+    this.onSend(request)
   }
   private processResponse(response: Response): IteratorValue<any> {
     if (response.error) throw response.error
@@ -217,7 +217,7 @@ class Values {
   }
   private cancel() {
     if (this.rid === undefined) return
-    this.ws.send(this.id, { cancel: this.rid })
+    this.onCancel(this.rid)
   }
   [Symbol.asyncIterator]() {
     return this
