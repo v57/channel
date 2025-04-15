@@ -57,13 +57,13 @@ test("events", async () => {
 test("events/cancel", async () => {
   events.hello.send('test', 'event 0')
   let count = 0
-  const topic = await client.subscribe('hello', 'test', (event) => {
+  const subscription = await client.subscribe('hello', 'test', (event) => {
     count += 1
     expect(event).toContain('event ')
   })
   events.hello.send('test', 'event 1')
   await sleep()
-  client.unsubscribe(topic)
+  subscription.cancel()
   await sleep()
   events.hello.send('test', 'event 2')
   await sleep()

@@ -26,7 +26,7 @@ Channel.prototype.connect = function (address: string | number): Sender {
         topics.delete(topic)
       },
       event(topic: string, body: any) {
-        ws.subscribed.get(topic)?.(body)
+        ws.receivedEvent(topic, body)
       }
     })
   }
@@ -121,12 +121,27 @@ export class WebSocketClient {
     this.pending.delete(id)
   }
 }
+type EventBody = (body: any) => void
 class WebSocketTopics extends WebSocketClient {
-  subscribed = new Map<string, (body: any) => void>()
-  addTopic(topic: string, event: (body: any) => void): void {
-    this.subscribed.set(topic, event)
+  subscribed = new Map<string, Map<number, EventBody>>()
+  addTopic(topic: string, event: EventBody): () => boolean {
+    const id = ++this.id
+    let map = this.subscribed.get(topic)
+    if (map) {
+      map.set(id, event)
+    } else {
+      map = new Map<number, EventBody>()
+      map.set(id, event)
+      this.subscribed.set(topic, map)
+    }
+    return () => {
+      map.delete(id)
+      if (map.size) return false
+      this.subscribed.delete(topic)
+      return true
+    }
   }
-  removeTopic(topic: string): void {
-    this.subscribed.delete(topic)
+  receivedEvent(topic: string, event: any) {
+    this.subscribed.get(topic)?.forEach(a => a(event))
   }
 }

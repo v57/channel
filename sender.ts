@@ -1,11 +1,9 @@
 import type { Channel, Response } from "./channel"
-import type { WebSocketClient } from "./client"
 
 export interface Sender {
   send(path: string, body?: any): Promise<any>
   values(path: string, body?: any): Values
-  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<string>
-  unsubscribe(topic: string): void
+  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<Cancellable>
   stop(): void
 }
 export interface Body<State> {
@@ -14,16 +12,19 @@ export interface Body<State> {
   state: State
 }
 
-interface ConnectionInterface<RequestId> {
+export interface Cancellable {
+  cancel(): void
+}
+
+interface ConnectionInterface<RequestId = number, TopicId = number> {
   send(body: any): RequestId
   cancel(id: RequestId): boolean
   notify(body: any): void
-  addTopic(topic: string, event: (body: any) => void): void
-  removeTopic(topic: string): void
+  addTopic(topic: string, event: (body: any) => void): () => boolean
   stop(): void
 }
 
-export function makeSender<RequestId>(ch: Channel, connection: ConnectionInterface<RequestId>): Sender {
+export function makeSender(ch: Channel, connection: ConnectionInterface): Sender {
   return {
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
@@ -38,30 +39,33 @@ export function makeSender<RequestId>(ch: Channel, connection: ConnectionInterfa
       })
     },
     values(path: string, body?: any) {
-      let id: RequestId | undefined
+      let id: number | undefined
       return new Values(ch, path, body, (body) => id = connection.send(body), (rid) => {
         if (id && !connection.cancel(id)) {
           connection.send({ cancel: rid })
         }
       })
     },
-    async subscribe(path: string, body: any, event: (body: any) => void): Promise<string> {
+    async subscribe(path: string, body: any, event: (body: any) => void): Promise<Cancellable> {
       return new Promise((success, failure) => {
         const request = ch.makeSubscription(path, body, (response) => {
           if (response.error) {
             failure(response.error)
           } else {
             const topic = response.topic!
-            connection.addTopic(topic, event)
-            success(topic)
+            const cancel = connection.addTopic(topic, event)
+            success({
+              cancel(): void {
+                let cancalled = cancel()
+                if (cancalled) {
+                  connection.notify({ unsub: topic })
+                }
+              }
+            })
           }
         })
         connection.send(request)
       })
-    },
-    unsubscribe(topic: string): void {
-      connection.removeTopic(topic)
-      connection.notify({ unsub: topic })
     },
     stop() {
       connection.stop()
