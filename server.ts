@@ -58,6 +58,7 @@ Channel.prototype.listen = function <State>(port: number): Server {
             ws.send(JSON.stringify(body))
             return 0
           },
+          sent(id: number) { },
           cancel(id: number): boolean {
             return false
           },

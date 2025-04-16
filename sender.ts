@@ -18,6 +18,7 @@ export interface Cancellable {
 
 interface ConnectionInterface<RequestId = number> {
   send(body: any): RequestId
+  sent(id: RequestId): void
   cancel(id: RequestId): boolean
   notify(body: any): void
   addTopic(topic: string, event: (body: any) => void): () => boolean
@@ -28,14 +29,18 @@ export function makeSender(ch: Channel, connection: ConnectionInterface): Sender
   return {
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
+        let id: number | undefined
         const request = ch.makeRequest(path, body, (response) => {
           if (response.error) {
             failure(response.error)
           } else {
             success(response.body)
           }
+          if (id !== undefined) {
+            connection.sent(id)
+          }
         })
-        connection.send(request)
+        id = connection.send(request)
       })
     },
     values(path: string, body?: any) {
