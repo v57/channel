@@ -4,16 +4,17 @@ export { Channel }
 import { makeSender, type Sender } from "./sender"
 
 declare module "./channel" {
-  interface Channel {
-    connect(address: string | number): Sender
+  interface Channel<State> {
+    connect(address: string | number): Sender<State>
   }
 }
 
-Channel.prototype.connect = function (address: string | number): Sender {
+Channel.prototype.connect = function (address: string | number) {
   const ch = this
   const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`)
   let topics = new Set<string>()
   const sender = makeSender(ch, ws)
+  let state = {}
   ws.onmessage = (message) => {
     ch.receive(message, {
       response(body: string) {
@@ -29,6 +30,7 @@ Channel.prototype.connect = function (address: string | number): Sender {
         ws.receivedEvent(topic, body)
       },
       sender,
+      state
     })
   }
   return sender

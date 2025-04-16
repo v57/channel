@@ -2,23 +2,24 @@ import type { Subscription } from "./events"
 import { ObjectMap } from "./map"
 import type { Sender } from "./sender"
 
-type Function = (body: { body: any, sender: Sender }) => any | Promise<any>
-type Stream = (body: { body: any, sender: Sender }) => AsyncGenerator<any, void, any>
+type Function<State> = (body: { body: any, sender: Sender<State>, state: State }) => any | Promise<any>
+type Stream<State> = (body: { body: any, sender: Sender<State>, state: State }) => AsyncGenerator<any, void, any>
 export type EventBody = (body: any) => void
-interface Controller {
+interface Controller<State> {
   response: (response: any) => void
   subscribe: (topic: string) => void
   unsubscribe: (topic: string) => void
   event: (topic: string, event: any) => void
-  sender: Sender
+  sender: Sender<State>
+  state: State
 }
 
-export class Channel {
+export class Channel<State> {
   private id = 0
   publish: (topic: string, body: any) => void = () => { }
   requests = new Map<number, PendingRequest>()
-  private postApi = new ObjectMap<string, Function>
-  private streamApi = new ObjectMap<string, Stream>
+  private postApi = new ObjectMap<string, Function<State>>
+  private streamApi = new ObjectMap<string, Stream<State>>
   private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>
   _events?: Map<string, Subscription>
   constructor() { }
@@ -49,28 +50,28 @@ export class Channel {
   cancel(id: number) {
     this.requests.delete(id)
   }
-  post(path: string, request: Function) {
+  post(path: string, request: Function<State>) {
     this.postApi.set(path, request)
     return this
   }
-  stream(path: string, request: Stream) {
+  stream(path: string, request: Stream<State>) {
     this.streamApi.set(path, request)
     return this
   }
-  receive(some: any, controller: Controller) {
+  receive(some: any, controller: Controller<State>) {
     if (Array.isArray(some)) {
       some.forEach(a => this.receiveOne(a, controller))
     } else {
       this.receiveOne(some, controller)
     }
   }
-  receiveOne(some: any, controller: Controller) {
+  receiveOne(some: any, controller: Controller<State>) {
     if (some.path) {
       const id: number | undefined = some.id
       const api = this.postApi.get(some.path)
       try {
         if (!api) throw 'api not found'
-        const body = api({ body: some.body, sender: controller.sender })
+        const body = api({ body: some.body, sender: controller.sender, state: controller.state })
         if (id !== undefined) {
           if (body.then) {
             body.then((a: any) => {
@@ -132,9 +133,9 @@ export class Channel {
       if (request) request.response(some)
     }
   }
-  private async streamRequest(id: number, controller: Controller, body: any, stream: Stream) {
+  private async streamRequest(id: number, controller: Controller<State>, body: any, stream: Stream<State>) {
     try {
-      const values = stream({ body, sender: controller.sender })
+      const values = stream({ body, sender: controller.sender, state: controller.state })
       this.streams.set(id, values)
       for await (const value of values) {
         controller.response({ id, body: value })

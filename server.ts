@@ -5,14 +5,14 @@ import { makeSender, type Sender } from "./sender"
 export { Channel }
 
 declare module "./channel" {
-  interface Channel {
+  interface Channel<State> {
     listen(port: number): Server
   }
 }
 
 interface BodyContext<State> {
   state: State
-  sender: Sender
+  sender: Sender<State>
   subscriptions: Subscriptions
 }
 
@@ -41,13 +41,13 @@ class Subscriptions {
   }
 }
 
-Channel.prototype.listen = function <State>(port: number): Server {
+Channel.prototype.listen = function <State>(port: number, state?: (headers: Headers) => State): Server {
   const channel = this
   const ws = Bun.serve({
     port,
     hostname: '127.0.0.1',
     async fetch(req, server) {
-      if (server.upgrade(req, { data: {} })) return
+      if (server.upgrade(req, { data: { state: state?.(req.headers) ?? {} } })) return
       return new Response()
     },
     websocket: {
@@ -92,7 +92,8 @@ Channel.prototype.listen = function <State>(port: number): Server {
           event(topic: string, event: any) {
             ws.data.subscriptions.receivedEvent(topic, event)
           },
-          sender: ws.data.sender
+          sender: ws.data.sender,
+          state: ws.data.state
         })
       },
     },
