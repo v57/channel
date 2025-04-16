@@ -5,7 +5,7 @@ import { makeSender, type Sender } from "./sender"
 
 declare module "./channel" {
   interface Channel<State> {
-    connect(address: string | number): Sender<State>
+    connect(address: string | number): Sender
   }
 }
 

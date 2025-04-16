@@ -12,7 +12,7 @@ declare module "./channel" {
 
 interface BodyContext<State> {
   state: State
-  sender: Sender<State>
+  sender: Sender
   subscriptions: Subscriptions
 }
 

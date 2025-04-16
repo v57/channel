@@ -2,15 +2,15 @@ import type { Subscription } from "./events"
 import { ObjectMap } from "./map"
 import type { Sender } from "./sender"
 
-type Function<State> = (body: { body: any, sender: Sender<State>, state: State }) => any | Promise<any>
-type Stream<State> = (body: { body: any, sender: Sender<State>, state: State }) => AsyncGenerator<any, void, any>
+type Function<State> = (body: { body: any, sender: Sender, state: State }) => any | Promise<any>
+type Stream<State> = (body: { body: any, sender: Sender, state: State }) => AsyncGenerator<any, void, any>
 export type EventBody = (body: any) => void
 interface Controller<State> {
   response: (response: any) => void
   subscribe: (topic: string) => void
   unsubscribe: (topic: string) => void
   event: (topic: string, event: any) => void
-  sender: Sender<State>
+  sender: Sender
   state: State
 }
 

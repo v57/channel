@@ -1,14 +1,14 @@
 import type { Channel, Response } from "./channel"
 
-export interface Sender<State> {
+export interface Sender {
   send(path: string, body?: any): Promise<any>
-  values(path: string, body?: any): Values<State>
+  values(path: string, body?: any): Values
   subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<Cancellable>
   stop(): void
 }
 export interface Body<State> {
   body: any
-  sender: Sender<State>
+  sender: Sender
   state: State
 }
 
@@ -25,7 +25,7 @@ interface ConnectionInterface<RequestId = number> {
   stop(): void
 }
 
-export function makeSender<State>(ch: Channel<State>, connection: ConnectionInterface): Sender<State> {
+export function makeSender<State>(ch: Channel<State>, connection: ConnectionInterface): Sender {
   return {
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
@@ -78,8 +78,8 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
   }
 }
 
-class Values<State> {
-  ch: Channel<State>
+class Values {
+  ch: Channel<any>
   path: string
   body: any | undefined
   isRunning = false
@@ -88,7 +88,7 @@ class Values<State> {
   rid: number | undefined
   onSend: (body: any) => void
   onCancel: (id: number) => void
-  constructor(ch: Channel<State>, path: string, body: any | undefined, onSend: (body: any) => void, onCancel: (id: number) => void) {
+  constructor(ch: Channel<any>, path: string, body: any | undefined, onSend: (body: any) => void, onCancel: (id: number) => void) {
     this.ch = ch
     this.path = path
     this.body = body
