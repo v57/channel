@@ -1,6 +1,7 @@
 import type { ServerWebSocket, Server } from "bun"
-import { Channel } from "./channel"
+import { Channel, type EventBody } from "./channel"
 import type { SubscriptionEvent } from "./events"
+import { makeSender, type Sender } from "./sender"
 export { Channel }
 
 declare module "./channel" {
@@ -9,7 +10,38 @@ declare module "./channel" {
   }
 }
 
-Channel.prototype.listen = function <Body>(port: number): Server {
+interface BodyContext<State> {
+  state: State
+  sender: Sender
+  subscriptions: Subscriptions
+}
+
+class Subscriptions {
+  id = 0
+  subscribed = new Map<string, Map<number, EventBody>>()
+  addTopic(topic: string, event: EventBody): () => boolean {
+    const id = ++this.id
+    let map = this.subscribed.get(topic)
+    if (map) {
+      map.set(id, event)
+    } else {
+      map = new Map<number, EventBody>()
+      map.set(id, event)
+      this.subscribed.set(topic, map)
+    }
+    return () => {
+      map.delete(id)
+      if (map.size) return false
+      this.subscribed.delete(topic)
+      return true
+    }
+  }
+  receivedEvent(topic: string, event: any) {
+    this.subscribed.get(topic)?.forEach(a => a(event))
+  }
+}
+
+Channel.prototype.listen = function <State>(port: number): Server {
   const channel = this
   const ws = Bun.serve({
     port,
@@ -19,13 +51,31 @@ Channel.prototype.listen = function <Body>(port: number): Server {
       return new Response()
     },
     websocket: {
-      open(ws: ServerWebSocket<Body>) {
+      open(ws: ServerWebSocket<BodyContext<State>>) {
+        ws.data.subscriptions = new Subscriptions()
+        ws.data.sender = makeSender(channel, {
+          send(body: any): number {
+            ws.send(JSON.stringify(body))
+            return 0
+          },
+          cancel(id: number): boolean {
+            return false
+          },
+          notify(body: any): void {
+            ws.send(JSON.stringify(body))
+          },
+          addTopic(topic: string, event: (body: any) => void): () => boolean {
+            return ws.data.subscriptions.addTopic(topic, event)
+          },
+          stop(): void {
+            ws.close()
+          }
+        })
+      },
+      close(ws: ServerWebSocket<BodyContext<State>>) {
 
       },
-      close(ws: ServerWebSocket<Body>) {
-
-      },
-      message(ws: ServerWebSocket<Body>, message: any) {
+      message(ws: ServerWebSocket<BodyContext<State>>, message: any) {
         if (typeof message !== 'string') return
         const req = JSON.parse(message)
         channel.receive(req, {
@@ -38,9 +88,10 @@ Channel.prototype.listen = function <Body>(port: number): Server {
           unsubscribe(topic: string) {
             ws.unsubscribe(topic)
           },
-          event() {
-
-          }
+          event(topic: string, event: any) {
+            ws.data.subscriptions.receivedEvent(topic, event)
+          },
+          sender: ws.data.sender
         })
       },
     },

@@ -13,7 +13,7 @@ async function sleep(seconds: number) {
 
 new Channel()
   .post('hello', () => 'hello')
-  .post('echo', (body) => body)
+  .post('echo', ({ body }) => body)
   .stream('progress', async function* () {
     for (let i = 0; i <= 5; i += 1) {
       yield i

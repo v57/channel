@@ -1,13 +1,16 @@
 import type { Subscription } from "./events"
 import { ObjectMap } from "./map"
+import type { Sender } from "./sender"
 
-type Function = (body: any) => any | Promise<any>
-type Stream = (body: any) => AsyncGenerator<any, void, any>
+type Function = (body: { body: any, sender: Sender }) => any | Promise<any>
+type Stream = (body: { body: any, sender: Sender }) => AsyncGenerator<any, void, any>
+export type EventBody = (body: any) => void
 interface Controller {
   response: (response: any) => void
   subscribe: (topic: string) => void
   unsubscribe: (topic: string) => void
   event: (topic: string, event: any) => void
+  sender: Sender
 }
 
 export class Channel {
@@ -67,7 +70,7 @@ export class Channel {
       const api = this.postApi.get(some.path)
       try {
         if (!api) throw 'api not found'
-        const body = api(some.body)
+        const body = api({ body: some.body, sender: controller.sender })
         if (id !== undefined) {
           if (body.then) {
             body.then((a: any) => {
@@ -131,7 +134,7 @@ export class Channel {
   }
   private async streamRequest(id: number, controller: Controller, body: any, stream: Stream) {
     try {
-      const values = stream(body)
+      const values = stream({ body, sender: controller.sender })
       this.streams.set(id, values)
       for await (const value of values) {
         controller.response({ id, body: value })

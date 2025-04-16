@@ -16,7 +16,7 @@ export interface Cancellable {
   cancel(): void
 }
 
-interface ConnectionInterface<RequestId = number, TopicId = number> {
+interface ConnectionInterface<RequestId = number> {
   send(body: any): RequestId
   cancel(id: RequestId): boolean
   notify(body: any): void

@@ -15,7 +15,8 @@ async function sleep(seconds: number = 0.001) {
 let valuesSent = 0
 new Channel()
   .post('hello', () => 'world')
-  .post('echo', (body) => body)
+  .post('mirror', async ({ sender }) => await sender.send('hello'))
+  .post('echo', ({ body }) => body)
   .stream('stream/values', async function* () {
     for (let i = 0; i < 3; i += 1) {
       yield i
@@ -32,6 +33,7 @@ new Channel()
   .events(Subscription.parse(events))
   .listen(2049)
 const client = new Channel()
+  .post('hello', () => 'client world')
   .connect(2049)
 test("post/hello", async () => {
   const response = await client.send('hello')
@@ -85,4 +87,8 @@ test("stream/cancel", async () => {
     if (value === 2) break
   }
   expect(valuesSent).toBe(3)
+})
+test("server/post", async () => {
+  const response = await client.send('mirror')
+  expect(response).toBe('client world')
 })

@@ -1,4 +1,4 @@
-import { Channel } from "./channel"
+import { Channel, type EventBody } from "./channel"
 import { ObjectMap } from "./map"
 export { Channel }
 import { makeSender, type Sender } from "./sender"
@@ -13,7 +13,7 @@ Channel.prototype.connect = function (address: string | number): Sender {
   const ch = this
   const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`)
   let topics = new Set<string>()
-
+  const sender = makeSender(ch, ws)
   ws.onmessage = (message) => {
     ch.receive(message, {
       response(body: string) {
@@ -27,10 +27,10 @@ Channel.prototype.connect = function (address: string | number): Sender {
       },
       event(topic: string, body: any) {
         ws.receivedEvent(topic, body)
-      }
+      },
+      sender,
     })
   }
-  const sender = makeSender(ch, ws)
   return sender
 }
 
@@ -121,7 +121,7 @@ export class WebSocketClient {
     this.pending.delete(id)
   }
 }
-type EventBody = (body: any) => void
+
 class WebSocketTopics extends WebSocketClient {
   subscribed = new Map<string, Map<number, EventBody>>()
   addTopic(topic: string, event: EventBody): () => boolean {
