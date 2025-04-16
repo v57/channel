@@ -39,6 +39,16 @@ new Channel<State>()
       await sleep()
     }
   })
+  .stream('mirror/stream', async function* ({ sender }) {
+    for await (const value of sender.values('stream/values')) {
+      yield value
+    }
+  })
+  .stream('mirror/stream/cancel', async function* ({ sender }) {
+    for await (const value of sender.values('stream/cancel')) {
+      yield value
+    }
+  })
   .stream('stream/cancel', async function* () {
     for (let i = 0; i < 10; i += 1) {
       yield i
@@ -51,6 +61,19 @@ new Channel<State>()
 
 const client = new Channel()
   .post('hello', () => 'client world')
+  .stream('stream/values', async function* () {
+    for (let i = 0; i < 3; i += 1) {
+      yield i
+      await sleep()
+    }
+  })
+  .stream('stream/cancel', async function* () {
+    for (let i = 0; i < 10; i += 1) {
+      yield i
+      valuesSent += 1
+      await sleep()
+    }
+  })
   .connect(2049)
 
 test("post/hello", async () => {
@@ -113,6 +136,23 @@ test("stream/cancel", async () => {
 test("server/post", async () => {
   const response = await client.send('mirror')
   expect(response).toBe('client world')
+})
+test("server/stream", async () => {
+  let a = 0
+  for await (const value of client.values('mirror/stream')) {
+    expect(value).toBe(a)
+    a += 1
+  }
+})
+test("server/stream/cancel", async () => {
+  let a = 0
+  valuesSent = 0
+  for await (const value of client.values('mirror/stream/cancel')) {
+    expect(value).toBe(a)
+    a += 1
+    if (value === 2) break
+  }
+  expect(valuesSent).toBe(3)
 })
 test('state/auth', async () => {
   const client = new Channel()
