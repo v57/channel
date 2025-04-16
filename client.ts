@@ -9,9 +9,13 @@ declare module "./channel" {
   }
 }
 
-Channel.prototype.connect = function (address: string | number) {
+interface Options {
+  headers?(): any
+}
+
+Channel.prototype.connect = function (address: string | number, options: Options = {}) {
   const ch = this
-  const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`)
+  const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`, options.headers)
   let topics = new Set<string>()
   const sender = makeSender(ch, ws)
   let state = {}
@@ -47,12 +51,15 @@ export class WebSocketClient {
   private isWaitingLength = 0
   queue: any[] = []
   isConnected: boolean = false
-  constructor(address: string) {
+  headers?: () => any
+  constructor(address: string, headers?: () => any) {
     this.address = address
+    this.headers = headers
     this.start()
   }
   start() {
-    const ws = new WebSocket(this.address)
+    // @ts-ignore
+    const ws = new WebSocket(this.address, this.headers ? { headers: this.headers() } : undefined)
     ws.onopen = () => {
       this.isConnected = true
       this.ws = ws
