@@ -12,11 +12,26 @@ async function sleep(seconds: number = 0.001) {
   await new Promise((resolve) => { setTimeout(resolve, seconds * 1000) })
 }
 
+interface State {
+  name?: string
+}
+
 let valuesSent = 0
-new Channel()
+new Channel<State>()
   .post('hello', () => 'world')
   .post('mirror', async ({ sender }) => await sender.send('hello'))
   .post('echo', ({ body }) => body)
+  .post('auth', ({ body: { name }, state }) => {
+    state.name = name
+    return name
+  })
+  .post('auth/name', ({ state }) => {
+    if (state.name) {
+      return state.name
+    } else {
+      throw 'unauthorized'
+    }
+  })
   .stream('stream/values', async function* () {
     for (let i = 0; i < 3; i += 1) {
       yield i
@@ -32,9 +47,11 @@ new Channel()
   })
   .events(Subscription.parse(events))
   .listen(2049)
+
 const client = new Channel()
   .post('hello', () => 'client world')
   .connect(2049)
+
 test("post/hello", async () => {
   const response = await client.send('hello')
   expect(response).toBe('world')
@@ -91,4 +108,18 @@ test("stream/cancel", async () => {
 test("server/post", async () => {
   const response = await client.send('mirror')
   expect(response).toBe('client world')
+})
+test('state/auth', async () => {
+  const client = new Channel()
+    .connect(2049)
+  await client.send('auth', { name: 'tester' })
+  const name = await client.send('auth/name')
+  expect(name).toBe('tester')
+  client.stop()
+})
+test('state/unauthorized', async () => {
+  const client = new Channel()
+    .connect(2049)
+  const response = client.send('auth/name')
+  expect(response).rejects.toBe('unauthorized')
 })
