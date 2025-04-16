@@ -11,6 +11,7 @@ declare module "./channel" {
 
 interface Options {
   headers?(): any
+  onConnect?(sender: Sender): Promise<void>
 }
 
 Channel.prototype.connect = function (address: string | number, options: Options = {}) {
@@ -19,6 +20,8 @@ Channel.prototype.connect = function (address: string | number, options: Options
   let topics = new Set<string>()
   const sender = makeSender(ch, ws)
   let state = {}
+  const onConnect = options.onConnect
+  if (onConnect) ws.onopen = () => onConnect(sender)
   ws.onmessage = (message) => {
     ch.receive(message, {
       response(body: string) {
@@ -44,7 +47,7 @@ export class WebSocketClient {
   id = 0
   address: string
   ws?: WebSocket
-  onopen: (() => void) | undefined
+  onopen: (() => Promise<void>) | undefined
   onmessage: ((message: any) => void) | undefined
   pending = new ObjectMap<number, any>()
   private isWaiting = 0
@@ -60,10 +63,10 @@ export class WebSocketClient {
   start() {
     // @ts-ignore
     const ws = new WebSocket(this.address, this.headers ? { headers: this.headers() } : undefined)
-    ws.onopen = () => {
+    ws.onopen = async () => {
       this.isConnected = true
       this.ws = ws
-      this.onopen?.()
+      await this.onopen?.()
       ws.send(JSON.stringify(this.pending.map(a => a)))
     }
     ws.onclose = () => {
