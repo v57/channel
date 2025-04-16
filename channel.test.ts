@@ -21,6 +21,7 @@ new Channel<State>()
   .post('hello', () => 'world')
   .post('mirror', async ({ sender }) => await sender.send('hello'))
   .post('echo', ({ body }) => body)
+  .post('empty', () => { })
   .post('auth', ({ body: { name }, state }) => {
     state.name = name
     return name
@@ -60,6 +61,10 @@ test("post/echo", async () => {
   const random = Math.random()
   const response = await client.send('echo', random)
   expect(response).toBe(random)
+})
+test("post/noreturn", async () => {
+  const response = await client.send('empty')
+  expect(response).toBeUndefined()
 })
 test("events", async () => {
   events.hello.send('test', 'event 0')

@@ -73,7 +73,7 @@ export class Channel<State> {
         if (!api) throw 'api not found'
         const body = api({ body: some.body, sender: controller.sender, state: controller.state })
         if (id !== undefined) {
-          if (body.then) {
+          if (body?.then) {
             body.then((a: any) => {
               controller.response({ id, body: a })
             })
