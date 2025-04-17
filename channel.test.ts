@@ -56,7 +56,7 @@ new Channel<State>()
       await sleep()
     }
   })
-  .events(Subscription.parse(events))
+  .events(events)
   .listen(2049)
 
 const client = new Channel()

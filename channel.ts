@@ -1,4 +1,4 @@
-import type { Subscription } from "./events"
+import { Subscription } from "./events"
 import { ObjectMap } from "./map"
 import type { Sender } from "./sender"
 
@@ -23,6 +23,15 @@ export class Channel<State> {
   private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>
   _events?: Map<string, Subscription>
   constructor() { }
+  post(path: string, request: Function<State>) {
+    this.postApi.set(path, request)
+    return this
+  }
+  stream(path: string, request: Stream<State>) {
+    this.streamApi.set(path, request)
+    return this
+  }
+
   makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
     const id = this.id++
     const pending: PendingRequest = {
@@ -49,14 +58,6 @@ export class Channel<State> {
   }
   cancel(id: number) {
     this.requests.delete(id)
-  }
-  post(path: string, request: Function<State>) {
-    this.postApi.set(path, request)
-    return this
-  }
-  stream(path: string, request: Stream<State>) {
-    this.streamApi.set(path, request)
-    return this
   }
   receive(some: any, controller: Controller<State>) {
     if (Array.isArray(some)) {
@@ -146,8 +147,12 @@ export class Channel<State> {
     }
     this.streams.delete(id)
   }
-  events(events: Map<string, Subscription>) {
-    this._events = events
+  events(events: Map<string, Subscription> | any) {
+    if (events instanceof Map) {
+      this._events = events
+    } else {
+      this._events = Subscription.parse(events)
+    }
     return this
   }
 }
