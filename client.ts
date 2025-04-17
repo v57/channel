@@ -1,9 +1,9 @@
-import { Channel, type EventBody } from "./channel"
-import { ObjectMap } from "./map"
+import { Channel, type EventBody } from './channel'
+import { ObjectMap } from './map'
 export { Channel }
-import { makeSender, type Sender } from "./sender"
+import { makeSender, type Sender } from './sender'
 
-declare module "./channel" {
+declare module './channel' {
   interface Channel<State> {
     connect(address: string | number): Sender
   }
@@ -22,7 +22,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
   let state = {}
   const onConnect = options.onConnect
   if (onConnect) ws.onopen = () => onConnect(sender)
-  ws.onmessage = (message) => {
+  ws.onmessage = message => {
     ch.receive(message, {
       response(body: string) {
         ws.notify(body)
@@ -37,7 +37,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
         ws.receivedEvent(topic, body)
       },
       sender,
-      state
+      state,
     })
   }
   return sender
@@ -88,7 +88,9 @@ export class WebSocketClient {
   send(body: any): number {
     const id = this.id++
     this.pending.set(id, body)
-    if (!this.ws) { return id }
+    if (!this.ws) {
+      return id
+    }
     switch (this.isWaiting) {
       case 0:
         this.ws.send(JSON.stringify(body))

@@ -1,9 +1,10 @@
-import { Subscription } from "./events"
-import { ObjectMap } from "./map"
-import type { Sender } from "./sender"
+import { Subscription } from './events'
+import { ObjectMap } from './map'
+import type { Sender } from './sender'
 
-type Function<State> = (body: { body: any, sender: Sender, state: State }) => any | Promise<any>
-type Stream<State> = (body: { body: any, sender: Sender, state: State }) => AsyncGenerator<any, void, any>
+export type Body<State> = { body: any; sender: Sender; state: State }
+type Function<State> = (body: Body<State>) => any | Promise<any>
+type Stream<State> = (body: Body<State>) => AsyncGenerator<any, void, any>
 export type EventBody = (body: any) => void
 interface Controller<State> {
   response: (response: any) => void
@@ -16,13 +17,13 @@ interface Controller<State> {
 
 export class Channel<State> {
   private id = 0
-  publish: (topic: string, body: any) => void = () => { }
+  publish: (topic: string, body: any) => void = () => {}
   requests = new Map<number, PendingRequest>()
-  private postApi = new ObjectMap<string, Function<State>>
-  private streamApi = new ObjectMap<string, Stream<State>>
-  private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>
+  private postApi = new ObjectMap<string, Function<State>>()
+  private streamApi = new ObjectMap<string, Stream<State>>()
+  private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>()
   _events?: Map<string, Subscription>
-  constructor() { }
+  constructor() {}
   post(path: string, request: Function<State>) {
     this.postApi.set(path, request)
     return this
@@ -35,7 +36,8 @@ export class Channel<State> {
   makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
     const id = this.id++
     const pending: PendingRequest = {
-      request: { id, path, body }, response
+      request: { id, path, body },
+      response,
     }
     this.requests.set(id, pending)
     return { id, path, body }
@@ -43,7 +45,8 @@ export class Channel<State> {
   makeStream(stream: string, body: any | undefined, response: (response: Response) => void): StreamRequest {
     const id = this.id++
     const pending: PendingRequest = {
-      request: { id, stream, body }, response
+      request: { id, stream, body },
+      response,
     }
     this.requests.set(id, pending)
     return { id, stream, body }
@@ -51,7 +54,8 @@ export class Channel<State> {
   makeSubscription(sub: string, body: any | undefined, response: (response: Response) => void): SubscriptionRequest {
     const id = this.id++
     const pending: PendingRequest = {
-      request: { id, sub, body }, response
+      request: { id, sub, body },
+      response,
     }
     this.requests.set(id, pending)
     return { id, sub, body }

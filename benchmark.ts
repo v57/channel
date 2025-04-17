@@ -1,6 +1,6 @@
-import { Channel } from "./channel"
+import { Channel } from './channel'
 import './client'
-import type { Sender } from "./sender"
+import type { Sender } from './sender'
 import './server'
 
 interface TestingInfo {
@@ -11,17 +11,14 @@ async function startTest(name: string, test: (client: Sender, info: TestingInfo)
   const start = Bun.nanoseconds()
   let count = 0
   let info: TestingInfo = { isCancelled: false }
-  const server = new Channel()
-    .post('hello', () => ++count)
-    .listen(2048)
-  const client = new Channel()
-    .connect(2048)
+  const server = new Channel().post('hello', () => ++count).listen(2048)
+  const client = new Channel().connect(2048)
   setTimeout(() => {
     info.isCancelled = true
   }, 500)
   await test(client, info)
   const ops = Math.floor(count / ((Bun.nanoseconds() - start) / 1_000_000_000))
-  const formatted = new Intl.NumberFormat('en-US').format(ops);
+  const formatted = new Intl.NumberFormat('en-US').format(ops)
   console.log(formatted.padStart(9, ' '), 'ops', name)
   client.stop()
   server.stop()

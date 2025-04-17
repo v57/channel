@@ -1,10 +1,10 @@
-import type { ServerWebSocket, Server } from "bun"
-import { Channel, type EventBody } from "./channel"
-import type { SubscriptionEvent } from "./events"
-import { makeSender, type Sender } from "./sender"
+import type { ServerWebSocket, Server } from 'bun'
+import { Channel, type EventBody } from './channel'
+import type { SubscriptionEvent } from './events'
+import { makeSender, type Sender } from './sender'
 export { Channel }
 
-declare module "./channel" {
+declare module './channel' {
   interface Channel<State> {
     listen(port: number): Server
   }
@@ -58,7 +58,7 @@ Channel.prototype.listen = function <State>(port: number, state?: (headers: Head
             ws.send(JSON.stringify(body))
             return 0
           },
-          sent(id: number) { },
+          sent(id: number) {},
           cancel(id: number): boolean {
             return false
           },
@@ -70,12 +70,10 @@ Channel.prototype.listen = function <State>(port: number, state?: (headers: Head
           },
           stop(): void {
             ws.close()
-          }
+          },
         })
       },
-      close(ws: ServerWebSocket<BodyContext<State>>) {
-
-      },
+      close(ws: ServerWebSocket<BodyContext<State>>) {},
       message(ws: ServerWebSocket<BodyContext<State>>, message: any) {
         if (typeof message !== 'string') return
         const req = JSON.parse(message)
@@ -93,7 +91,7 @@ Channel.prototype.listen = function <State>(port: number, state?: (headers: Head
             ws.data.subscriptions.receivedEvent(topic, event)
           },
           sender: ws.data.sender,
-          state: ws.data.state
+          state: ws.data.state,
         })
       },
     },
@@ -101,7 +99,7 @@ Channel.prototype.listen = function <State>(port: number, state?: (headers: Head
   const publisher = {
     publish(event: SubscriptionEvent) {
       ws.publish(event.topic, JSON.stringify(event))
-    }
+    },
   }
   this._events?.forEach(a => a.publishers.push(publisher))
   return ws

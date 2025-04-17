@@ -1,4 +1,3 @@
-
 export class ObjectMap<Key, Value> {
   private storage: any = {}
   size = 0

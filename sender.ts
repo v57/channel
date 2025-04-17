@@ -1,4 +1,4 @@
-import type { Channel, Response } from "./channel"
+import type { Channel, Response } from './channel'
 
 export interface Sender {
   send(path: string, body?: any): Promise<any>
@@ -30,7 +30,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
         let id: number | undefined
-        const request = ch.makeRequest(path, body, (response) => {
+        const request = ch.makeRequest(path, body, response => {
           if (response.error) {
             failure(response.error)
           } else {
@@ -45,15 +45,21 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
     },
     values(path: string, body?: any) {
       let id: number | undefined
-      return new Values(ch, path, body, (body) => id = connection.send(body), (rid) => {
-        if (id && !connection.cancel(id)) {
-          connection.send({ cancel: rid })
-        }
-      })
+      return new Values(
+        ch,
+        path,
+        body,
+        body => (id = connection.send(body)),
+        rid => {
+          if (id && !connection.cancel(id)) {
+            connection.send({ cancel: rid })
+          }
+        },
+      )
     },
     async subscribe(path: string, body: any, event: (body: any) => void): Promise<Cancellable> {
       return new Promise((success, failure) => {
-        const request = ch.makeSubscription(path, body, (response) => {
+        const request = ch.makeSubscription(path, body, response => {
           if (response.error) {
             failure(response.error)
           } else {
@@ -65,7 +71,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
                 if (cancalled) {
                   connection.notify({ unsub: topic })
                 }
-              }
+              },
             })
           }
         })
@@ -74,7 +80,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
     },
     stop() {
       connection.stop()
-    }
+    },
   }
 }
 
@@ -88,7 +94,13 @@ class Values {
   rid: number | undefined
   onSend: (body: any) => void
   onCancel: (id: number) => void
-  constructor(ch: Channel<any>, path: string, body: any | undefined, onSend: (body: any) => void, onCancel: (id: number) => void) {
+  constructor(
+    ch: Channel<any>,
+    path: string,
+    body: any | undefined,
+    onSend: (body: any) => void,
+    onCancel: (id: number) => void,
+  ) {
     this.ch = ch
     this.path = path
     this.body = body
@@ -99,7 +111,7 @@ class Values {
   private start() {
     if (this.isRunning) return
     this.isRunning = true
-    const request = this.ch.makeStream(this.path, this.body, (response) => {
+    const request = this.ch.makeStream(this.path, this.body, response => {
       const pendingPromise = this.pending.shift()
       if (pendingPromise) {
         pendingPromise(response)
@@ -116,7 +128,7 @@ class Values {
   }
   async next(): Promise<IteratorValue<any>> {
     const result = new Promise<IteratorValue<any>>((success, failure) => {
-      this.pending.push((value) => {
+      this.pending.push(value => {
         try {
           success(this.processResponse(value))
         } catch (error) {

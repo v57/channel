@@ -26,8 +26,8 @@ export class Subscription {
   }
   publishers: Publisher[] = []
   prefix: string = ''
-  _topic: (request: any) => string = (request) => request === undefined ? '' : `${request}`
-  _body: (request: any) => any | Promise<any> | undefined = () => { }
+  _topic: (request: any) => string = request => (request === undefined ? '' : `${request}`)
+  _body: (request: any) => any | Promise<any> | undefined = () => {}
   topic(make: (request: any) => string) {
     this._topic = make
   }

@@ -1,15 +1,17 @@
-import { expect, test } from "bun:test"
-import { Channel } from "./channel"
-import { Subscription } from "./events"
+import { expect, test } from 'bun:test'
+import { Channel } from './channel'
+import { Subscription } from './events'
 import './client'
 import './server'
 
 const events = {
-  hello: new Subscription()
+  hello: new Subscription(),
 }
 
 async function sleep(seconds: number = 0.001) {
-  await new Promise((resolve) => { setTimeout(resolve, seconds * 1000) })
+  await new Promise(resolve => {
+    setTimeout(resolve, seconds * 1000)
+  })
 }
 
 interface State {
@@ -21,7 +23,7 @@ new Channel<State>()
   .post('hello', () => 'world')
   .post('mirror', async ({ sender }) => await sender.send('hello'))
   .post('echo', ({ body }) => body)
-  .post('empty', () => { })
+  .post('empty', () => {})
   .post('auth', ({ body: { name }, state }) => {
     state.name = name
     return name
@@ -76,23 +78,23 @@ const client = new Channel()
   })
   .connect(2049)
 
-test("post/hello", async () => {
+test('post/hello', async () => {
   const response = await client.send('hello')
   expect(response).toBe('world')
 })
-test("post/echo", async () => {
+test('post/echo', async () => {
   const random = Math.random()
   const response = await client.send('echo', random)
   expect(response).toBe(random)
 })
-test("post/noreturn", async () => {
+test('post/noreturn', async () => {
   const response = await client.send('empty')
   expect(response).toBeUndefined()
 })
-test("events", async () => {
+test('events', async () => {
   events.hello.send('test', 'event 0')
   let count = 0
-  await client.subscribe('hello', 'test', (event) => {
+  await client.subscribe('hello', 'test', event => {
     count += 1
     expect(event).toContain('event ')
   })
@@ -101,10 +103,10 @@ test("events", async () => {
   await sleep()
   expect(count).toBe(2)
 })
-test("events/cancel", async () => {
+test('events/cancel', async () => {
   events.hello.send('test', 'event 0')
   let count = 0
-  const subscription = await client.subscribe('hello', 'test', (event) => {
+  const subscription = await client.subscribe('hello', 'test', event => {
     count += 1
     expect(event).toContain('event ')
   })
@@ -116,14 +118,14 @@ test("events/cancel", async () => {
   await sleep()
   expect(count).toBe(1)
 })
-test("stream", async () => {
+test('stream', async () => {
   let a = 0
   for await (const value of client.values('stream/values')) {
     expect(value).toBe(a)
     a += 1
   }
 })
-test("stream/cancel", async () => {
+test('stream/cancel', async () => {
   let a = 0
   valuesSent = 0
   for await (const value of client.values('stream/cancel')) {
@@ -133,18 +135,18 @@ test("stream/cancel", async () => {
   }
   expect(valuesSent).toBe(3)
 })
-test("server/post", async () => {
+test('server/post', async () => {
   const response = await client.send('mirror')
   expect(response).toBe('client world')
 })
-test("server/stream", async () => {
+test('server/stream', async () => {
   let a = 0
   for await (const value of client.values('mirror/stream')) {
     expect(value).toBe(a)
     a += 1
   }
 })
-test("server/stream/cancel", async () => {
+test('server/stream/cancel', async () => {
   let a = 0
   valuesSent = 0
   for await (const value of client.values('mirror/stream/cancel')) {
@@ -155,16 +157,14 @@ test("server/stream/cancel", async () => {
   expect(valuesSent).toBe(3)
 })
 test('state/auth', async () => {
-  const client = new Channel()
-    .connect(2049)
+  const client = new Channel().connect(2049)
   await client.send('auth', { name: 'tester' })
   const name = await client.send('auth/name')
   expect(name).toBe('tester')
   client.stop()
 })
 test('state/unauthorized', async () => {
-  const client = new Channel()
-    .connect(2049)
+  const client = new Channel().connect(2049)
   const response = client.send('auth/name')
   expect(response).rejects.toBe('unauthorized')
 })
