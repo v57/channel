@@ -19,4 +19,9 @@ export class ObjectMap<Key, Value> {
     }
     return array
   }
+  forEach<O>(callback: (value: Value, key: Key) => void) {
+    for (let [key, value] of Object.entries(this.storage)) {
+      callback(value as Value, key as Key)
+    }
+  }
 }
