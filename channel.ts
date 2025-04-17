@@ -151,16 +151,33 @@ export class Channel<State> {
     }
     this.streams.delete(id)
   }
-  events(events: Map<string, Subscription> | any) {
+  events(events: Map<string, Subscription> | any, prefix: string = '') {
     if (events instanceof Map) {
-      this._events = events
+      if (prefix.length) {
+        if (!this._events) this._events = new Map()
+        const e = this._events
+        events.forEach((value, key) => {
+          e.set(`${prefix}/${key}`, value)
+        })
+      } else {
+        this._events = events
+      }
     } else {
-      this._events = Subscription.parse(events)
+      this._events = Subscription.parse(events, prefix)
     }
     return this
   }
   api(api: Api<State>) {
     this._parseApi(api, '')
+    return this
+  }
+  merge(channel: Channel<State>, prefix = '') {
+    let p = prefix.length ? prefix + '/' : ''
+    if (channel._events) {
+      this.events(channel.events, prefix)
+    }
+    channel.postApi.forEach((value, key) => this.post(p + key, value))
+    channel.streamApi.forEach((value, key) => this.stream(p + key, value))
     return this
   }
   private _parseApi(api: Api<State>, prefix: string) {

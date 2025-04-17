@@ -8,9 +8,9 @@ export interface SubscriptionEvent {
 }
 
 export class Subscription {
-  static parse(events: any): Map<string, Subscription> {
+  static parse(events: any, prefix = ''): Map<string, Subscription> {
     const map = new Map<string, Subscription>()
-    this._parse(events, '', map)
+    this._parse(events, prefix, map)
     return map
   }
   static _parse(object: any, prefix: string, map: Map<string, Subscription>) {
