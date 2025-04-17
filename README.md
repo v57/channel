@@ -1,15 +1,17 @@
-# dcp
+# Channel
 
-To install dependencies:
+# Installation
+`bun add @v57/channel`
 
-```bash
-bun install
+# Usage
+
+``` ts
+import { Channel } from '@v57/channel'
+new Channel()
+  .post('hello', () => 'world')
+  .listen(8080)
+
+const client = new Channel()
+  .connect(8080)
+const response = await client.send('hello')
 ```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.2.3. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.

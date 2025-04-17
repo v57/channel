@@ -1,5 +1,5 @@
 {
-  "name": "dcp",
+  "name": "channel",
   "module": "index.ts",
   "type": "module",
   "devDependencies": {
