@@ -1,7 +1,5 @@
 import type { ServerWebSocket, Server } from 'bun'
-import { Channel, type EventBody } from './channel'
-import type { SubscriptionEvent } from './events'
-import { makeSender, type Sender } from './sender'
+import { Channel, makeSender, type EventBody, type SubscriptionEvent, type Sender } from './channel'
 export { Channel }
 
 declare module './channel' {

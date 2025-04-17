@@ -1,6 +1,5 @@
-import { Channel } from './channel'
+import { Channel, type Sender } from './channel'
 import './client'
-import type { Sender } from './sender'
 import './server'
 
 interface TestingInfo {
@@ -46,7 +45,7 @@ await startTest('10000 threads', async (client, info) => {
   await Promise.all(Array.from({ length: 10000 }, () => run(client, info)))
 })
 /*
-// dcp
+// channel
 52,478 ops 1 thread
 198,796 ops 10 threads
 303,340 ops 100 threads

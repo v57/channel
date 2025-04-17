@@ -1,7 +1,5 @@
-import { Channel, type EventBody } from './channel'
-import { ObjectMap } from './map'
+import { Channel, ObjectMap, type EventBody, makeSender, type Sender } from './channel'
 export { Channel }
-import { makeSender, type Sender } from './sender'
 
 declare module './channel' {
   interface Channel<State> {

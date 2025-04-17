@@ -1,6 +1,5 @@
 import { expect, test } from 'bun:test'
-import { Channel } from './channel'
-import { Subscription } from './events'
+import { Channel, Subscription } from './channel'
 import './client'
 import './server'
 
