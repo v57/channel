@@ -6,6 +6,9 @@ export type Body<State> = { body: any; sender: Sender; state: State }
 type Function<State> = (body: Body<State>) => any | Promise<any>
 type Stream<State> = (body: Body<State>) => AsyncGenerator<any, void, any>
 export type EventBody = (body: any) => void
+type Api<State> = {
+  [key: string]: Api<State> | ((body: Body<State>) => any)
+}
 interface Controller<State> {
   response: (response: any) => void
   subscribe: (topic: string) => void
@@ -155,6 +158,27 @@ export class Channel<State> {
       this._events = Subscription.parse(events)
     }
     return this
+  }
+  api(api: Api<State>) {
+    this._parseApi(api, '')
+    return this
+  }
+  private _parseApi(api: Api<State>, prefix: string) {
+    for (let [key, value] of Object.entries(api)) {
+      if (typeof value === 'function') {
+        const name = value.constructor.name
+        const isIterator = name === 'AsyncGeneratorFunction' || name === 'GeneratorFunction'
+        const path = key === '_' ? prefix : prefix.length ? `${prefix}/${key}` : key
+        if (isIterator) {
+          this.stream(path, value)
+        } else {
+          this.post(path, value)
+        }
+        continue
+      } else if (typeof value === 'object') {
+        this._parseApi(value, prefix.length ? `${prefix}/${key}` : key)
+      }
+    }
   }
 }
 
