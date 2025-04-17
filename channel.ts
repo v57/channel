@@ -60,9 +60,6 @@ export class Channel<State> {
     this.requests.set(id, pending)
     return { id, sub, body }
   }
-  cancel(id: number) {
-    this.requests.delete(id)
-  }
   receive(some: any, controller: Controller<State>) {
     if (Array.isArray(some)) {
       some.forEach(a => this.receiveOne(a, controller))
