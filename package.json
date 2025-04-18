@@ -1,6 +1,6 @@
 {
   "name": "channel",
-  "module": "index.ts",
+  "module": "channel.ts",
   "type": "module",
   "devDependencies": {
     "@types/bun": "latest"
