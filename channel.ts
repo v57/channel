@@ -265,7 +265,7 @@ export class Subscription {
 }
 
 export class ObjectMap<Key, Value> {
-  private storage: any = {}
+  storage: any = {}
   size = 0
   get(id: Key): Value | undefined {
     return this.storage[id]
