@@ -1,4 +1,4 @@
-import { Channel, ObjectMap, type EventBody, makeSender, type Sender } from './channel'
+import { Channel, ObjectMap, type EventBody, makeSender, type Sender, type SubscriptionEvent } from './channel'
 export { Channel }
 
 declare module './channel' {
@@ -38,6 +38,14 @@ Channel.prototype.connect = function (address: string | number, options: Options
       state,
     })
   }
+  this.eventsApi?.forEach(a =>
+    a.publishers.push({
+      publish(event: SubscriptionEvent) {
+        if (!topics.has(event.topic)) return
+        ws.send(event)
+      },
+    }),
+  )
   return sender
 }
 
