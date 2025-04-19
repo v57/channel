@@ -3,13 +3,17 @@ export { Channel }
 
 declare module './channel' {
   interface Channel<State> {
-    connect(address: string | number): Sender
+    connect(address: string | number): ClientSender
   }
 }
 
 interface Options {
   headers?(): any
   onConnect?(sender: Sender): Promise<void>
+}
+
+interface ClientSender extends Sender {
+  ws: WebSocketClient
 }
 
 Channel.prototype.connect = function (address: string | number, options: Options = {}) {
@@ -46,7 +50,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
       },
     }),
   )
-  return sender
+  return { ...sender, ws }
 }
 
 export class WebSocketClient {
@@ -139,6 +143,9 @@ export class WebSocketClient {
   }
   sent(id: number) {
     this.pending.delete(id)
+  }
+  throttle() {
+    this.isWaiting = 3
   }
 }
 
