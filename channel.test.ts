@@ -71,6 +71,17 @@ const server = new Channel<State>()
     }
   })
   .events(events)
+  .merge(
+    new Channel<State>()
+      .api({
+        hello: () => 'world',
+        *stream() {},
+      })
+      .events({
+        never: new Subscription(),
+      }),
+    'merged',
+  )
   .listen(2049)
 
 const client = new Channel()
