@@ -20,6 +20,7 @@ export class Channel<State> {
   requests = new Map<number, PendingRequest>()
   postApi = new ObjectMap<string, Function<State>>()
   streamApi = new ObjectMap<string, Stream<State>>()
+  _onDisconnect?: (state: State, sender: Sender) => void
   eventsApi?: Map<string, Subscription>
   private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>()
   constructor() {}
@@ -31,7 +32,10 @@ export class Channel<State> {
     this.streamApi.set(path, request)
     return this
   }
-
+  onDisconnect(action: (state: State, sender: Sender) => void) {
+    this._onDisconnect = action
+    return this
+  }
   makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
     const id = this.id++
     const pending: PendingRequest = {

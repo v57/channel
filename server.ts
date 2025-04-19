@@ -71,7 +71,9 @@ Channel.prototype.listen = function <State>(port: number, state?: (headers: Head
           },
         })
       },
-      close(ws: ServerWebSocket<BodyContext<State>>) {},
+      close(ws: ServerWebSocket<BodyContext<State>>) {
+        channel._onDisconnect?.(ws.data.state, ws.data.sender)
+      },
       message(ws: ServerWebSocket<BodyContext<State>>, message: any) {
         if (typeof message !== 'string') return
         const req = JSON.parse(message)
