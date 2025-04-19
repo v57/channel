@@ -198,6 +198,7 @@ test('state/unauthorized', async () => {
   expect(response).rejects.toBe('unauthorized')
 })
 test('stopping', async () => {
+  client.ws.throttle()
   client.send('disconnect')
   await sleep()
   server.stop()
