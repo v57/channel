@@ -1,10 +1,13 @@
 import { expect, test } from 'bun:test'
-import { Channel, Subscription } from './channel'
+import { Channel, Subscription, type Cancellable } from './channel'
 import './client'
 import './server'
 
 const events = {
   hello: new Subscription(),
+}
+const clientEvents = {
+  names: new Subscription(),
 }
 
 async function sleep(seconds: number = 0.001) {
@@ -33,6 +36,13 @@ new Channel<State>()
     } else {
       throw 'unauthorized'
     }
+  })
+  .post('mirror/events', async ({ sender }) => {
+    let sub: Cancellable | undefined
+    sub = await sender.subscribe('names', '1', event => {
+      valuesSent += 1
+      sub?.cancel()
+    })
   })
   .stream('stream/values', async function* () {
     for (let i = 0; i < 3; i += 1) {
@@ -79,6 +89,7 @@ const client = new Channel()
       },
     },
   })
+  .events(clientEvents)
   .connect(2049)
 
 test('post/hello', async () => {
@@ -141,6 +152,18 @@ test('stream/cancel', async () => {
 test('server/post', async () => {
   const response = await client.send('mirror')
   expect(response).toBe('client world')
+})
+test('server/subscribe', async () => {
+  valuesSent = 0
+  await client.send('mirror/events')
+  await sleep(0.1)
+  clientEvents.names.send('2', 'po')
+  clientEvents.names.send('1', 'h')
+  // server unsubscribes here, so next shouldn't be received
+  await sleep(0.1)
+  clientEvents.names.send('1', 'we')
+  await sleep(0.1)
+  expect(valuesSent).toBe(1)
 })
 test('server/stream', async () => {
   let a = 0
