@@ -148,18 +148,13 @@ export class Channel<State> {
     this.streams.delete(id)
   }
   events(events: Map<string, Subscription> | any, prefix: string = '') {
+    if (!this.eventsApi) this.eventsApi = new Map()
+    let p = prefix.length ? prefix + '/' : ''
+    const e = this.eventsApi
     if (events instanceof Map) {
-      if (prefix.length) {
-        if (!this.eventsApi) this.eventsApi = new Map()
-        const e = this.eventsApi
-        events.forEach((value, key) => {
-          e.set(`${prefix}/${key}`, value)
-        })
-      } else {
-        this.eventsApi = events
-      }
+      events.forEach((value, key) => e.set(p + key, value))
     } else {
-      this.eventsApi = Subscription.parse(events, prefix)
+      Subscription.parse(events, prefix, this.eventsApi)
     }
     return this
   }
@@ -232,19 +227,14 @@ export interface SubscriptionEvent {
 }
 
 export class Subscription {
-  static parse(events: any, prefix = ''): Map<string, Subscription> {
-    const map = new Map<string, Subscription>()
-    this._parse(events, prefix, map)
-    return map
-  }
-  static _parse(object: any, prefix: string, map: Map<string, Subscription>) {
+  static parse(object: any, prefix: string, map: Map<string, Subscription>) {
     for (let [key, value] of Object.entries(object)) {
       if (value instanceof Subscription) {
         value.prefix = prefix.length ? `${prefix}/${key}` : key
         map.set(prefix + key, value)
         continue
       } else if (typeof value === 'object') {
-        this._parse(value, `${prefix}${key}/`, map)
+        this.parse(value, `${prefix}${key}/`, map)
       }
     }
   }
