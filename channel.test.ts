@@ -61,19 +61,23 @@ new Channel<State>()
   .listen(2049)
 
 const client = new Channel()
-  .post('hello', () => 'client world')
-  .stream('stream/values', async function* () {
-    for (let i = 0; i < 3; i += 1) {
-      yield i
-      await sleep()
-    }
-  })
-  .stream('stream/cancel', async function* () {
-    for (let i = 0; i < 10; i += 1) {
-      yield i
-      valuesSent += 1
-      await sleep()
-    }
+  .api({
+    hello: () => 'client world',
+    stream: {
+      async *values() {
+        for (let i = 0; i < 3; i += 1) {
+          yield i
+          await sleep()
+        }
+      },
+      async *cancel() {
+        for (let i = 0; i < 10; i += 1) {
+          yield i
+          valuesSent += 1
+          await sleep()
+        }
+      },
+    },
   })
   .connect(2049)
 
