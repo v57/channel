@@ -4,7 +4,7 @@ export { Channel }
 
 declare module './channel' {
   interface Channel<State> {
-    listen(port: number): Server
+    listen(port: number, state?: (headers: Headers) => State): Server
   }
 }
 
