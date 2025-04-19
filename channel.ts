@@ -18,10 +18,10 @@ export class Channel<State> {
   private id = 0
   publish: (topic: string, body: any) => void = () => {}
   requests = new Map<number, PendingRequest>()
-  private postApi = new ObjectMap<string, Function<State>>()
-  private streamApi = new ObjectMap<string, Stream<State>>()
+  postApi = new ObjectMap<string, Function<State>>()
+  streamApi = new ObjectMap<string, Stream<State>>()
+  eventsApi?: Map<string, Subscription>
   private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>()
-  _events?: Map<string, Subscription>
   constructor() {}
   post(path: string, request: Function<State>) {
     this.postApi.set(path, request)
@@ -97,7 +97,7 @@ export class Channel<State> {
       this.streams.get(id)?.return()
     } else if (some.sub) {
       const id: number | undefined = some.id
-      const subscription = this._events?.get(some.sub)
+      const subscription = this.eventsApi?.get(some.sub)
       try {
         if (!subscription) throw 'subscription not found'
         let topic = subscription._topic(some.body)
@@ -150,16 +150,16 @@ export class Channel<State> {
   events(events: Map<string, Subscription> | any, prefix: string = '') {
     if (events instanceof Map) {
       if (prefix.length) {
-        if (!this._events) this._events = new Map()
-        const e = this._events
+        if (!this.eventsApi) this.eventsApi = new Map()
+        const e = this.eventsApi
         events.forEach((value, key) => {
           e.set(`${prefix}/${key}`, value)
         })
       } else {
-        this._events = events
+        this.eventsApi = events
       }
     } else {
-      this._events = Subscription.parse(events, prefix)
+      this.eventsApi = Subscription.parse(events, prefix)
     }
     return this
   }
@@ -169,7 +169,7 @@ export class Channel<State> {
   }
   merge(channel: Channel<State>, prefix = '') {
     let p = prefix.length ? prefix + '/' : ''
-    if (channel._events) {
+    if (channel.eventsApi) {
       this.events(channel.events, prefix)
     }
     channel.postApi.forEach((value, key) => this.post(p + key, value))

@@ -99,6 +99,6 @@ Channel.prototype.listen = function <State>(port: number, state?: (headers: Head
       ws.publish(event.topic, JSON.stringify(event))
     },
   }
-  this._events?.forEach(a => a.publishers.push(publisher))
+  this.eventsApi?.forEach(a => a.publishers.push(publisher))
   return ws
 }
