@@ -21,11 +21,14 @@ interface State {
 }
 
 let valuesSent = 0
-new Channel<State>()
+const server = new Channel<State>()
   .post('hello', () => 'world')
   .post('mirror', async ({ sender }) => await sender.send('hello'))
   .post('echo', ({ body }) => body)
   .post('empty', () => {})
+  .post('disconnect', ({ sender }) => {
+    sender.stop()
+  })
   .post('auth', ({ body: { name }, state }) => {
     state.name = name
     return name
@@ -156,13 +159,13 @@ test('server/post', async () => {
 test('server/subscribe', async () => {
   valuesSent = 0
   await client.send('mirror/events')
-  await sleep(0.1)
+  await sleep()
   clientEvents.names.send('2', 'po')
   clientEvents.names.send('1', 'h')
   // server unsubscribes here, so next shouldn't be received
-  await sleep(0.1)
+  await sleep()
   clientEvents.names.send('1', 'we')
-  await sleep(0.1)
+  await sleep()
   expect(valuesSent).toBe(1)
 })
 test('server/stream', async () => {
@@ -193,4 +196,9 @@ test('state/unauthorized', async () => {
   const client = new Channel().connect(2049)
   const response = client.send('auth/name')
   expect(response).rejects.toBe('unauthorized')
+})
+test('stopping', async () => {
+  client.send('disconnect')
+  await sleep()
+  server.stop()
 })
