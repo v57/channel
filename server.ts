@@ -4,7 +4,7 @@ export { Channel, type Sender, ObjectMap } from './channel'
 
 declare module './channel' {
   interface Channel<State> {
-    listen(port: number, state?: (headers: Headers) => Promise<State>): Server
+    listen(port: number, state?: (headers: Headers) => Promise<State> | State): Server
   }
 }
 
@@ -39,7 +39,10 @@ class Subscriptions {
   }
 }
 
-Channel.prototype.listen = function <State>(port: number, state?: (headers: Headers) => Promise<State>): Server {
+Channel.prototype.listen = function <State>(
+  port: number,
+  state?: (headers: Headers) => Promise<State> | State,
+): Server {
   const channel = this
   const ws = Bun.serve({
     port,
