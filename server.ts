@@ -4,7 +4,7 @@ export { Channel, type Sender, ObjectMap } from './channel'
 
 declare module './channel' {
   interface Channel<State> {
-    listen(port: number, state?: (headers: Headers) => State): Server
+    listen(port: number, state?: (headers: Headers) => Promise<State>): Server
   }
 }
 
@@ -39,13 +39,13 @@ class Subscriptions {
   }
 }
 
-Channel.prototype.listen = function <State>(port: number, state?: (headers: Headers) => State): Server {
+Channel.prototype.listen = function <State>(port: number, state?: (headers: Headers) => Promise<State>): Server {
   const channel = this
   const ws = Bun.serve({
     port,
     hostname: '127.0.0.1',
     async fetch(req, server) {
-      if (server.upgrade(req, { data: { state: state?.(req.headers) ?? {} } })) return
+      if (server.upgrade(req, { data: { state: (await state?.(req.headers)) ?? {} } })) return
       return new Response()
     },
     websocket: {
