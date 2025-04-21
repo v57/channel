@@ -3,7 +3,7 @@ export { Channel }
 
 declare module './channel' {
   interface Channel<State> {
-    connect(address: string | number, options: Options): ClientSender
+    connect(address: string | number, options?: Options): ClientSender
   }
 }
 
