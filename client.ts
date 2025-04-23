@@ -24,24 +24,23 @@ Channel.prototype.connect = function (address: string | number, options: Options
   let state = {}
   const onConnect = options.onConnect
   if (onConnect) ws.onopen = () => onConnect(sender)
-  ws.onmessage = message => {
-    ch.receive(message, {
-      response(body: string) {
-        ws.notify(body)
-      },
-      subscribe(topic: string) {
-        topics.add(topic)
-      },
-      unsubscribe(topic: string) {
-        topics.delete(topic)
-      },
-      event(topic: string, body: any) {
-        ws.receivedEvent(topic, body)
-      },
-      sender,
-      state,
-    })
+  const controller = {
+    response(body: string) {
+      ws.notify(body)
+    },
+    subscribe(topic: string) {
+      topics.add(topic)
+    },
+    unsubscribe(topic: string) {
+      topics.delete(topic)
+    },
+    event(topic: string, body: any) {
+      ws.receivedEvent(topic, body)
+    },
+    sender,
+    state,
   }
+  ws.onmessage = message => ch.receive(message, controller)
   this.eventsApi?.forEach(a =>
     a.publishers.push({
       publish(event: SubscriptionEvent) {
