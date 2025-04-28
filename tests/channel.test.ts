@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
-import { Channel, Subscription, type Cancellable } from './channel'
-import './client'
-import './server'
+import { Channel, Subscription, type Cancellable } from '../channel'
+import '../client'
+import '../server'
 
 const events = {
   hello: new Subscription(),

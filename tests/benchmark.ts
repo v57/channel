@@ -1,6 +1,6 @@
-import { Channel, type Sender } from './channel'
-import './client'
-import './server'
+import { Channel, type Sender } from '../channel'
+import '../client'
+import '../server'
 
 interface TestingInfo {
   isCancelled: boolean
