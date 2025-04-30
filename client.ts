@@ -8,7 +8,7 @@ declare module './channel' {
 }
 
 interface Options {
-  headers?(): any
+  headers?(): Promise<any>
   onConnect?(sender: Sender): Promise<void>
 }
 
@@ -69,9 +69,9 @@ export class WebSocketClient {
     this.headers = headers
     this.start()
   }
-  start() {
+  async start() {
     // @ts-ignore
-    const ws = new WebSocket(this.address, this.headers ? { headers: this.headers() } : undefined)
+    const ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
     ws.onopen = async () => {
       this.isConnected = true
       this.ws = ws
