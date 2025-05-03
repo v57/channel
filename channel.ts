@@ -88,10 +88,10 @@ export class Channel<State> {
         if (!api) throw 'api not found'
         const body = api({ body: some.body, sender: controller.sender, state: controller.state }, some.path)
         if (id !== undefined) {
-          if (body?.then) {
-            body.then((a: any) => {
-              controller.response({ id, body: a })
-            })
+          if (body?.then && body?.catch) {
+            body
+              .then((a: any) => controller.response({ id, body: a }))
+              .catch((e: any) => controller.response({ id, error: `${e}` }))
           } else {
             controller.response({ id, body })
           }
@@ -118,11 +118,13 @@ export class Channel<State> {
         if (topic.length === 0) topic = subscription.prefix
         else topic = subscription.prefix + '/' + topic
         const body = subscription._body(some.body)
-        if (body?.then) {
-          body.then((a: any) => {
-            controller.subscribe(topic)
-            controller.response({ id, topic, body: a })
-          })
+        if (body?.then && body.catch) {
+          body
+            .then((a: any) => {
+              controller.subscribe(topic)
+              controller.response({ id, topic, body: a })
+            })
+            .catch((e: any) => controller.response({ id, error: `${e}` }))
         } else {
           controller.subscribe(topic)
           controller.response({ id, topic, body })
@@ -272,7 +274,7 @@ export class Subscription {
     const topic = this._topic(request)
     const b: any | Promise<any> | undefined = body ?? this._body(request)
     if (b?.then) {
-      b.then((a: any) => this.publish(topic, body))
+      b.then((a: any) => this.publish(topic, a)).catch(() => {})
     } else {
       this.publish(topic, b)
     }
