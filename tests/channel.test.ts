@@ -50,6 +50,10 @@ test('post/noreturn', async () => {
   const response = await client.send('empty')
   expect(response).toBeUndefined()
 })
+test('post/notfound', async () => {
+  const response = client.send('notfound')
+  expect(response).rejects.toBe('api not found')
+})
 test('events', async () => {
   events.hello.send('test', 'event 0')
   let count = 0
