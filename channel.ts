@@ -24,7 +24,7 @@ export class Channel<State> {
   otherStreamApi: { path: (path: string) => boolean; request: Stream<State> }[] = []
   _onDisconnect?: (state: State, sender: Sender) => void
   eventsApi?: Map<string, Subscription>
-  private streams = new ObjectMap<number, AsyncIterator<any, void, any>>()
+  private streams = new ObjectMap<string, AsyncIterator<any, void, any>>()
   constructor() {}
   post(path: string, request: Function<State>) {
     this.postApi.set(path, request)
@@ -108,7 +108,7 @@ export class Channel<State> {
     } else if (some.cancel !== undefined) {
       const id: number | undefined = some.cancel
       if (id === undefined) throw 'stream requires id'
-      this.streams.get(id)?.return?.()
+      this.streams.get(`${controller.sender.id}/${id}`)?.return?.()
     } else if (some.sub) {
       const id: number | undefined = some.id
       const subscription = this.eventsApi?.get(some.sub)
@@ -159,7 +159,7 @@ export class Channel<State> {
   ) {
     try {
       const values = stream({ body, sender: controller.sender, state: controller.state }, path)
-      this.streams.set(id, values)
+      this.streams.set(`${controller.sender.id}/${id}`, values)
       try {
         while (true) {
           const value = await values.next()
@@ -174,7 +174,7 @@ export class Channel<State> {
     } catch (e) {
       controller.response({ id, error: `${e}` })
     }
-    this.streams.delete(id)
+    this.streams.delete(`${controller.sender.id}/${id}`)
   }
   events(events: Map<string, Subscription> | any, prefix: string = '') {
     if (!this.eventsApi) this.eventsApi = new Map()
