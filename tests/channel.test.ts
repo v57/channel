@@ -53,7 +53,7 @@ test('post/noreturn', async () => {
 test('events', async () => {
   events.hello.send('test', 'event 0')
   let count = 0
-  await client.subscribe('hello', 'test', event => {
+  const subscription = await client.subscribe('hello', 'test', event => {
     count += 1
     expect(event).toContain('event ')
   })
@@ -61,6 +61,7 @@ test('events', async () => {
   events.hello.send('test', 'event 2')
   await sleep()
   expect(count).toBe(2)
+  subscription.cancel()
 })
 test('events/cancel', async () => {
   events.hello.send('test', 'event 0')
