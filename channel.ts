@@ -1,6 +1,6 @@
 export type Body<State> = { body: any; sender: Sender; state: State }
 type Function<State> = (body: Body<State>, path: string) => any | Promise<any>
-type Stream<State> = (body: Body<State>, path: string) => AsyncGenerator<any, void, any>
+type Stream<State> = (body: Body<State>, path: string) => AsyncIterator<any, void, any>
 export type EventBody = (body: any) => void
 type Api<State> = {
   [key: string]: Api<State> | ((body: Body<State>) => any)
@@ -24,7 +24,7 @@ export class Channel<State> {
   otherStreamApi: { path: (path: string) => boolean; request: Stream<State> }[] = []
   _onDisconnect?: (state: State, sender: Sender) => void
   eventsApi?: Map<string, Subscription>
-  private streams = new ObjectMap<number, AsyncGenerator<any, void, any>>()
+  private streams = new ObjectMap<number, AsyncIterator<any, void, any>>()
   constructor() {}
   post(path: string, request: Function<State>) {
     this.postApi.set(path, request)
@@ -108,7 +108,7 @@ export class Channel<State> {
     } else if (some.cancel !== undefined) {
       const id: number | undefined = some.cancel
       if (id === undefined) throw 'stream requires id'
-      this.streams.get(id)?.return()
+      this.streams.get(id)?.return?.()
     } else if (some.sub) {
       const id: number | undefined = some.id
       const subscription = this.eventsApi?.get(some.sub)
@@ -160,10 +160,17 @@ export class Channel<State> {
     try {
       const values = stream({ body, sender: controller.sender, state: controller.state }, path)
       this.streams.set(id, values)
-      for await (const value of values) {
-        controller.response({ id, body: value })
-      }
-      controller.response({ id, done: true })
+      try {
+        while (true) {
+          const value = await values.next()
+          if (value.done) {
+            controller.response({ id, done: true })
+            break
+          } else {
+            controller.response({ id, body: value.value })
+          }
+        }
+      } catch {}
     } catch (e) {
       controller.response({ id, error: `${e}` })
     }
