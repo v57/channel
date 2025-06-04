@@ -108,6 +108,11 @@ test('stream/cancel', async () => {
   }
   expect(stats.streamCancel).toBe(3)
 })
+test('stream/notfound', async () => {
+  const client = new Channel().connect(2049)
+  const response = client.send('notfound')
+  expect(response).rejects.toBe('api not found')
+})
 test('server/post', async () => {
   const response = await client.send('mirror')
   expect(response).toBe('client world')
