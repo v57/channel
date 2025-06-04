@@ -322,6 +322,7 @@ export class ObjectMap<Key, Value> {
 }
 
 export interface Sender {
+  id: number
   send(path: string, body?: any): Promise<any>
   values(path: string, body?: any): Values
   subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<Cancellable>
@@ -341,8 +342,10 @@ interface ConnectionInterface<RequestId = number> {
   stop(): void
 }
 
+let senderId = 0
 export function makeSender<State>(ch: Channel<State>, connection: ConnectionInterface): Sender {
   return {
+    id: senderId++,
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
         let id: number | undefined
