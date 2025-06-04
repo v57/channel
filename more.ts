@@ -8,6 +8,7 @@ export class LazyState<T> {
   private subscribers = 0
   getValue: () => Promise<T> | T
   private minimumDelay: number = 1 / 30
+  private _alwaysNeedsUpdate: boolean = false
   constructor(getValue: () => Promise<T> | T) {
     this.getValue = getValue
     const { promise, resolve, reject } = Promise.withResolvers()
@@ -17,6 +18,10 @@ export class LazyState<T> {
   }
   delay(minimumDelaySeconds: number): this {
     this.minimumDelay = minimumDelaySeconds
+    return this
+  }
+  alwaysNeedsUpdate(): this {
+    this._alwaysNeedsUpdate = true
     return this
   }
   makeIterator() {
@@ -53,13 +58,14 @@ export class LazyState<T> {
     this.createPromise()
   }
   private scheduleUpdates() {
-    if (!this.allowsUpdates || !this.needsUpdate || this.waiting) return
+    if (!this.allowsUpdates || (!this._alwaysNeedsUpdate && !this.needsUpdate) || this.waiting) return
     this.waiting = true
     setTimeout(async () => {
       if (this.needsUpdate || this.allowsUpdates) {
         try {
           const value = await this.getValue()
           this.send(value)
+          this.scheduleUpdates()
         } finally {
           this.waiting = false
         }
