@@ -37,6 +37,10 @@ export class Channel<State> {
     this.streamApi.set(path, request)
     return this
   }
+  lazyStream(path: string, request: (body: Body<State>, path: string) => LazyState<any>) {
+    this.streamApi.set(path, (body, path) => request(body, path).makeIterator())
+    return this
+  }
   streamOther(path: (path: string) => boolean, request: Stream<State>) {
     this.otherStreamApi.push({ path, request })
     return this
