@@ -360,7 +360,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         body,
         body => (id = connection.send(body)),
         rid => {
-          if (id && !connection.cancel(id)) {
+          if (id !== undefined && !connection.cancel(id)) {
             connection.send({ cancel: rid })
           }
         },
