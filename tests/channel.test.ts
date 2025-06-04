@@ -82,6 +82,16 @@ test('events/cancel', async () => {
   await sleep()
   expect(count).toBe(1)
 })
+test('events/notfound', async () => {
+  try {
+    await client.subscribe('notfound', 'test', event => {
+      throw 'Should not be there'
+    })
+    await sleep()
+  } catch (error) {
+    expect(error).toBe('subscription not found')
+  }
+})
 test('stream', async () => {
   let a = 0
   for await (const value of client.values('stream/values')) {
