@@ -6,7 +6,7 @@ export class LazyState<T> {
   private allowsUpdates: boolean = false
   private waiting: boolean = false
   private subscribers = 0
-  private getValue: () => Promise<T> | T
+  getValue: () => Promise<T> | T
   private minimumDelay: number = 1 / 30
   constructor(getValue: () => Promise<T> | T) {
     this.getValue = getValue
@@ -87,9 +87,9 @@ export class LazyStateIterator<T> {
     if (!this.isStarted) {
       this.isStarted = true
       this.iterator.subscribe()
+      return { value: await this.iterator.getValue() }
     }
-    const result = await this.iterator.promise
-    return { value: result }
+    return { value: await this.iterator.promise }
   }
   async return() {
     this.cancel()
