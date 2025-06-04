@@ -75,7 +75,7 @@ Channel.prototype.listen = function <State>(
         })
       },
       close(ws: ServerWebSocket<BodyContext<State>>) {
-        channel._onDisconnect?.(ws.data.state, ws.data.sender)
+        channel.disconnect(ws.data.state, ws.data.sender)
       },
       message(ws: ServerWebSocket<BodyContext<State>>, message: any) {
         if (typeof message !== 'string') return

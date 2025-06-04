@@ -40,6 +40,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
     sender,
     state,
   }
+  ws.onclose = () => ch.disconnect(state, sender)
   ws.onmessage = message => ch.receive(message, controller)
   this.eventsApi?.forEach(a =>
     a.publishers.push({
@@ -57,6 +58,7 @@ export class WebSocketClient {
   address: string
   ws?: WebSocket
   onopen: (() => Promise<void>) | undefined
+  onclose?: () => void
   onmessage: ((message: any) => void) | undefined
   pending = new ObjectMap<number, any>()
   private isWaiting = 0
@@ -81,6 +83,7 @@ export class WebSocketClient {
     ws.onclose = () => {
       this.isConnected = false
       this.ws = undefined
+      this.onclose?.()
       setTimeout(() => this.start(), 100)
     }
     ws.onmessage = (message: MessageEvent<any>) => {

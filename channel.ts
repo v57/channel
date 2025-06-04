@@ -24,7 +24,6 @@ export class Channel<State> {
   otherStreamApi: { path: (path: string) => boolean; request: Stream<State> }[] = []
   _onDisconnect?: (state: State, sender: Sender) => void
   eventsApi?: Map<string, Subscription>
-  private streams = new ObjectMap<string, AsyncIterator<any, void, any>>()
   constructor() {}
   post(path: string, request: Function<State>) {
     this.postApi.set(path, request)
@@ -45,6 +44,10 @@ export class Channel<State> {
   onDisconnect(action: (state: State, sender: Sender) => void) {
     this._onDisconnect = action
     return this
+  }
+  disconnect(state: State, sender: Sender) {
+    this._onDisconnect?.(state, sender)
+    sender.streams.forEach(a => a?.return?.())
   }
   makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
     const id = this.id++
@@ -108,7 +111,7 @@ export class Channel<State> {
     } else if (some.cancel !== undefined) {
       const id: number | undefined = some.cancel
       if (id === undefined) throw 'stream requires id'
-      this.streams.get(`${controller.sender.id}/${id}`)?.return?.()
+      controller.sender.streams.get(id)?.return?.()
     } else if (some.sub) {
       const id: number | undefined = some.id
       const subscription = this.eventsApi?.get(some.sub)
@@ -159,7 +162,7 @@ export class Channel<State> {
   ) {
     try {
       const values = stream({ body, sender: controller.sender, state: controller.state }, path)
-      this.streams.set(`${controller.sender.id}/${id}`, values)
+      controller.sender.streams.set(id, values)
       try {
         while (true) {
           const value = await values.next()
@@ -174,7 +177,7 @@ export class Channel<State> {
     } catch (e) {
       controller.response({ id, error: `${e}` })
     }
-    this.streams.delete(`${controller.sender.id}/${id}`)
+    controller.sender.streams.delete(id)
   }
   events(events: Map<string, Subscription> | any, prefix: string = '') {
     if (!this.eventsApi) this.eventsApi = new Map()
@@ -322,7 +325,7 @@ export class ObjectMap<Key, Value> {
 }
 
 export interface Sender {
-  id: number
+  streams: ObjectMap<number, AsyncIterator<any, void, any>>
   send(path: string, body?: any): Promise<any>
   values(path: string, body?: any): Values
   subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<Cancellable>
@@ -342,10 +345,9 @@ interface ConnectionInterface<RequestId = number> {
   stop(): void
 }
 
-let senderId = 0
 export function makeSender<State>(ch: Channel<State>, connection: ConnectionInterface): Sender {
   return {
-    id: senderId++,
+    streams: new ObjectMap<number, AsyncIterator<any, void, any>>(),
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
         let id: number | undefined
