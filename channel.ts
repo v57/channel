@@ -104,14 +104,20 @@ export class Channel<State> {
       }
     } else if (some.stream) {
       const id: number | undefined = some.id
-      const api = this.streamApi.get(some.stream) ?? this.otherStreamApi.find(a => a.path(some.stream))?.request
-      if (!api) throw 'api not found'
-      if (id === undefined) throw 'stream requires id'
-      this.streamRequest(id, controller, some.stream, some.body, api)
+      try {
+        const api = this.streamApi.get(some.stream) ?? this.otherStreamApi.find(a => a.path(some.stream))?.request
+        if (!api) throw 'api not found'
+        if (id === undefined) throw 'stream requires id'
+        this.streamRequest(id, controller, some.stream, some.body, api)
+      } catch (e) {
+        if (id !== undefined) controller.response({ id, error: `${e}` })
+      }
     } else if (some.cancel !== undefined) {
-      const id: number | undefined = some.cancel
-      if (id === undefined) throw 'stream requires id'
-      controller.sender.streams.get(id)?.return?.()
+      try {
+        const id: number | undefined = some.cancel
+        if (id === undefined) throw 'stream requires id'
+        controller.sender.streams.get(id)?.return?.()
+      } catch {}
     } else if (some.sub) {
       const id: number | undefined = some.id
       const subscription = this.eventsApi?.get(some.sub)
