@@ -64,9 +64,10 @@ export class LazyState<T> {
       if (this.needsUpdate || this.allowsUpdates) {
         try {
           const value = await this.getValue()
+          this.waiting = false
           this.send(value)
           this.scheduleUpdates()
-        } finally {
+        } catch {
           this.waiting = false
         }
       } else {
