@@ -4,7 +4,7 @@ export { Channel, type Sender, ObjectMap } from './channel'
 
 declare module './channel' {
   interface Channel<State> {
-    listen(port: number, state?: (headers: Headers) => Promise<State> | State): Server
+    listen(port: number, state?: (headers: Headers) => Promise<State> | State, options?: ListenOptions<State>): Server
   }
 }
 
