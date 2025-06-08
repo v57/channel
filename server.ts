@@ -4,7 +4,7 @@ export { Channel, type Sender, ObjectMap } from './channel'
 
 declare module './channel' {
   interface Channel<State> {
-    listen(port: number, state?: (headers: Headers) => Promise<State> | State, options?: ListenOptions<State>): Server
+    listen(port: number, options?: ListenOptions<State>): Server
   }
 }
 
@@ -12,6 +12,12 @@ export interface BodyContext<State> {
   state: State
   sender: Sender
   subscriptions: Subscriptions
+}
+
+export interface ListenOptions<State> {
+  state?: (headers: Headers) => Promise<State> | State
+  onConnect?: (connection: BodyContext<State>) => void
+  onDisconnect?: (connection: BodyContext<State>) => void
 }
 
 class Subscriptions {
@@ -39,22 +45,13 @@ class Subscriptions {
   }
 }
 
-export interface ListenOptions<State> {
-  onConnect?: (connection: BodyContext<State>) => void
-  onDisconnect?: (connection: BodyContext<State>) => void
-}
-
-Channel.prototype.listen = function <State>(
-  port: number,
-  state?: (headers: Headers) => Promise<State> | State,
-  options?: ListenOptions<State>,
-): Server {
+Channel.prototype.listen = function <State>(port: number, options?: ListenOptions<State>): Server {
   const channel = this
   const ws = Bun.serve({
     port,
     hostname: '127.0.0.1',
     async fetch(req, server) {
-      if (server.upgrade(req, { data: { state: (await state?.(req.headers)) ?? {} } })) return
+      if (server.upgrade(req, { data: { state: (await options?.state?.(req.headers)) ?? {} } })) return
       return new Response()
     },
     websocket: {
