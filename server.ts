@@ -39,9 +39,14 @@ class Subscriptions {
   }
 }
 
+interface ListenOptions<State> {
+  onConnect?: (sender: Sender, state: State) => void
+}
+
 Channel.prototype.listen = function <State>(
   port: number,
   state?: (headers: Headers) => Promise<State> | State,
+  options?: ListenOptions<State>,
 ): Server {
   const channel = this
   const ws = Bun.serve({
@@ -73,6 +78,7 @@ Channel.prototype.listen = function <State>(
             ws.close()
           },
         })
+        options?.onConnect?.(ws.data.sender, ws.data.state)
       },
       close(ws: ServerWebSocket<BodyContext<State>>) {
         channel.disconnect(ws.data.state, ws.data.sender)
