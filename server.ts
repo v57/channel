@@ -8,7 +8,7 @@ declare module './channel' {
   }
 }
 
-interface BodyContext<State> {
+export interface BodyContext<State> {
   state: State
   sender: Sender
   subscriptions: Subscriptions
@@ -39,7 +39,7 @@ class Subscriptions {
   }
 }
 
-interface ListenOptions<State> {
+export interface ListenOptions<State> {
   onConnect?: (connection: BodyContext<State>) => void
   onDisconnect?: (connection: BodyContext<State>) => void
 }
