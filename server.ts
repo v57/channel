@@ -40,7 +40,8 @@ class Subscriptions {
 }
 
 interface ListenOptions<State> {
-  onConnect?: (sender: Sender, state: State) => void
+  onConnect?: (connection: BodyContext<State>) => void
+  onDisconnect?: (connection: BodyContext<State>) => void
 }
 
 Channel.prototype.listen = function <State>(
@@ -78,10 +79,11 @@ Channel.prototype.listen = function <State>(
             ws.close()
           },
         })
-        options?.onConnect?.(ws.data.sender, ws.data.state)
+        options?.onConnect?.(ws.data)
       },
       close(ws: ServerWebSocket<BodyContext<State>>) {
         channel.disconnect(ws.data.state, ws.data.sender)
+        options?.onDisconnect?.(ws.data)
       },
       message(ws: ServerWebSocket<BodyContext<State>>, message: any) {
         if (typeof message !== 'string') return
