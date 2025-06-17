@@ -46,7 +46,9 @@ export class Channel<State> {
     return this
   }
   disconnect(state: State, sender: Sender) {
-    this._onDisconnect?.(state, sender)
+    try {
+      this._onDisconnect?.(state, sender)
+    } catch {}
     sender.streams.forEach(a => a?.return?.())
   }
   makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
