@@ -4,7 +4,7 @@ export { Channel, type Sender, ObjectMap } from './channel'
 
 declare module './channel' {
   interface Channel<State> {
-    listen(port: number, options?: ListenOptions<State>): Server
+    listen(port: number | string, options?: ListenOptions<State>): Server
   }
 }
 
