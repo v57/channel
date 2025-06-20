@@ -45,11 +45,20 @@ class Subscriptions {
   }
 }
 
-Channel.prototype.listen = function <State>(port: number, options?: ListenOptions<State>): Server {
+Channel.prototype.listen = function <State>(address: number | string, options?: ListenOptions<State>): Server {
   const channel = this
+  let port: number
+  let hostname: string = '127.0.0.1'
+  if (typeof address === 'string') {
+    const [h, p] = address.split(':')
+    hostname = h
+    port = Number(p) ?? 80
+  } else {
+    port = address
+  }
   const ws = Bun.serve({
     port,
-    hostname: '127.0.0.1',
+    hostname,
     async fetch(req, server) {
       if (server.upgrade(req, { data: { state: (await options?.state?.(req.headers)) ?? {} } })) return
       return new Response()
