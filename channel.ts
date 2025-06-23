@@ -1,6 +1,6 @@
 export type Body<State> = { body: any; sender: Sender; state: State }
-type Function<State> = (body: Body<State>, path: string) => any | Promise<any>
-type Stream<State> = (
+export type Function<State> = (body: Body<State>, path: string) => any | Promise<any>
+export type Stream<State> = (
   body: Body<State>,
   path: string,
 ) => AsyncIterator<any, void, any> | Promise<AsyncIterator<any, void, any>>
