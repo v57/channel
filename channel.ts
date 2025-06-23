@@ -1,6 +1,9 @@
 export type Body<State> = { body: any; sender: Sender; state: State }
 type Function<State> = (body: Body<State>, path: string) => any | Promise<any>
-type Stream<State> = (body: Body<State>, path: string) => AsyncIterator<any, void, any>
+type Stream<State> = (
+  body: Body<State>,
+  path: string,
+) => AsyncIterator<any, void, any> | Promise<AsyncIterator<any, void, any>>
 export type EventBody = (body: any) => void
 type Api<State> = {
   [key: string]: Api<State> | ((body: Body<State>) => any)
@@ -169,7 +172,7 @@ export class Channel<State> {
     stream: Stream<State>,
   ) {
     try {
-      const values = stream({ body, sender: controller.sender, state: controller.state }, path)
+      const values = await stream({ body, sender: controller.sender, state: controller.state }, path)
       controller.sender.streams.set(id, values)
       try {
         while (true) {
