@@ -81,6 +81,9 @@ export class Channel<State> {
     this.requests.set(id, pending)
     return { id, sub, body }
   }
+  cancel(id: number) {
+    this.requests.delete(id)
+  }
   receive(some: any, controller: Controller<State>) {
     if (Array.isArray(some)) {
       some.forEach(a => this.receiveOne(a, controller))
@@ -338,6 +341,7 @@ export class ObjectMap<Key, Value> {
 export interface Sender {
   streams: ObjectMap<number, AsyncIterator<any, void, any>>
   send(path: string, body?: any): Promise<any>
+  request(path: string, body?: any): SendingRequest
   values(path: string, body?: any): Values
   subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<Cancellable>
   stop(): void
@@ -354,6 +358,11 @@ interface ConnectionInterface<RequestId = number> {
   notify(body: any): void
   addTopic(topic: string, event: (body: any) => void): () => boolean
   stop(): void
+}
+
+interface SendingRequest {
+  response: Promise<any>
+  cancel(): void
 }
 
 export function makeSender<State>(ch: Channel<State>, connection: ConnectionInterface): Sender {
@@ -374,6 +383,33 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         })
         id = connection.send(request)
       })
+    },
+    request(path: string, body?: any): SendingRequest {
+      let id: number | undefined
+      let rid: number | undefined
+      const response = new Promise((success, failure) => {
+        const request = ch.makeRequest(path, body, response => {
+          if (response.error) {
+            failure(response.error)
+          } else {
+            success(response.body)
+          }
+          if (id !== undefined) {
+            connection.sent(id)
+            id = undefined
+            rid = undefined
+          }
+        })
+        rid = request.id
+        id = connection.send(request)
+      })
+      return {
+        response,
+        cancel() {
+          if (id) connection.cancel(id)
+          if (rid) ch.cancel(rid)
+        },
+      }
     },
     values(path: string, body?: any) {
       let id: number | undefined
