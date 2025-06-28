@@ -8,7 +8,7 @@ export type EventBody = (body: any) => void
 type Api<State> = {
   [key: string]: Api<State> | ((body: Body<State>) => any)
 }
-interface Controller<State> {
+export interface Controller<State> {
   response: (response: any) => void
   subscribe: (topic: string) => void
   unsubscribe: (topic: string) => void
