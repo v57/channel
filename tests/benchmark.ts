@@ -44,6 +44,8 @@ await startTest('1000 threads', async (client, info) => {
 await startTest('10000 threads', async (client, info) => {
   await Promise.all(Array.from({ length: 10000 }, () => run(client, info)))
 })
+
+process.exit(0)
 /*
 // channel
 52,478 ops 1 thread
