@@ -1,40 +1,41 @@
 import { Channel, type Sender } from '../channel'
 import '../process'
 
-interface TestingInfo {
-  isCancelled: boolean
-}
-
-async function startTest(name: string, test: (client: Sender, info: TestingInfo) => Promise<void>) {
-  const start = Bun.nanoseconds()
-  let count = 0
-  let info: TestingInfo = { isCancelled: false }
-  const client = new Channel().post('hello', () => ++count).process()
-  setTimeout(() => {
-    info.isCancelled = true
-  }, 500)
-  await test(client, info)
-  const ops = Math.floor(count / ((Bun.nanoseconds() - start) / 1_000_000_000))
-  const formatted = new Intl.NumberFormat('en-US').format(ops)
+async function startTest(name: string, test: (client: Sender) => Promise<void>) {
+  let best = 0
+  for (let i = 0; i < 100; i += 1) {
+    const ops = await measure(test)
+    best = Math.max(best, ops)
+  }
+  const formatted = new Intl.NumberFormat('en-US').format(best)
   console.log(formatted.padStart(9, ' '), 'ops', name)
 }
-async function run(client: Sender, info: TestingInfo, ops: number = 100_000) {
+async function measure(test: (client: Sender) => Promise<void>): Promise<number> {
+  let count = 0
+  const client = new Channel()
+    .post('hello', () => ++count)
+    .post('async', async () => new Promise(r => r(++count)))
+    .process()
+  const start = Bun.nanoseconds()
+  await test(client)
+  return Math.floor(count / ((Bun.nanoseconds() - start) / 1_000_000_000))
+}
+async function run(client: Sender, api: string, ops: number) {
   for (let i = 0; i < ops; i += 1) {
-    if (info.isCancelled) return
-    await client.send('hello', undefined)
+    await client.send(api)
   }
 }
 
-await startTest('1 thread', async (client, info) => {
-  await run(client, info, 100_000)
+await startTest('async', async client => {
+  await run(client, 'async', 10000)
 })
-await startTest('10 threads', async (client, info) => {
-  await Promise.all(Array.from({ length: 10 }, () => run(client, info)))
+await startTest('sync', async client => {
+  await run(client, 'hello', 30000)
 })
 
 // await send
-// 2,929,337 ops 1 thread
-// 4,239,010 ops 10 threads
+// 2,297,134 ops async
+// 4,166,280 ops sync
 
 // Replacing Promise with callback will double the performance
 // 5,588,439 ops 1 thread
