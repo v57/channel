@@ -360,6 +360,10 @@ export class ObjectMap<Key, Value> {
       callback(value as Value, key as Key)
     }
   }
+  clear() {
+    this.storage = {}
+    this.size = 0
+  }
 }
 
 export interface Sender {
