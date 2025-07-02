@@ -47,12 +47,13 @@ await startTest('10000 threads', async (client, info) => {
 
 process.exit(0)
 /*
-// channel
-52,478 ops 1 thread
-198,796 ops 10 threads
-303,340 ops 100 threads
-301,064 ops 1000 threads
-848,467 ops 10000 threads
+// channel (Updated 2 Jul 2025)
+52,514 ops 1 thread
+202,026 ops 10 threads
+323,713 ops 100 threads
+317,170 ops 1000 threads
+862,517 ops 10000 threads
+3,391,675 ops multiple clients
 
 // socket.io websocket
 39,941 ops 1 thread
@@ -60,6 +61,7 @@ process.exit(0)
 175,222 ops 100 threads
 169,348 ops 1000 threads
 143,752 ops 10000 threads
+494,120 ops multiple clients
 
 // socket.io polling
 661 ops 1 thread
