@@ -1,8 +1,7 @@
-export type Body<State> = { body: any; sender: Sender; state: State }
-export type Function<State> = (body: Body<State>, path: string, task?: CancellableRequest) => any | Promise<any>
+export type Body<State> = { body: any; sender: Sender; state: State; path: string; task?: CancellableRequest }
+export type Function<State> = (body: Body<State>) => any | Promise<any>
 export type Stream<State> = (
   body: Body<State>,
-  path: string,
 ) => AsyncIterator<any, void, any> | Promise<AsyncIterator<any, void, any>>
 export type EventBody = (body: any) => void
 type Api<State> = {
@@ -115,7 +114,7 @@ export class Channel<State> {
             },
           }
         }
-        const body = api({ body: some.body, sender: controller.sender, state: controller.state }, some.path, task)
+        const body = api({ body: some.body, sender: controller.sender, state: controller.state, path: some.path, task })
         if (id !== undefined) {
           if (body?.then && body?.catch) {
             if (task) controller.sender.requests.set(id, task) // we only need cancellable tasks here cause it halves the performance and reduces by 30% on Promise
@@ -199,7 +198,7 @@ export class Channel<State> {
     stream: Stream<State>,
   ) {
     try {
-      const values = await stream({ body, sender: controller.sender, state: controller.state }, path)
+      const values = await stream({ body, sender: controller.sender, state: controller.state, path })
       controller.sender.streams.set(id, values)
       try {
         while (true) {
