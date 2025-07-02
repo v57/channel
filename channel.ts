@@ -1,5 +1,5 @@
 export type Body<State> = { body: any; sender: Sender; state: State }
-export type Function<State> = (body: Body<State>, path: string) => any | Promise<any>
+export type Function<State> = (body: Body<State>, path: string, task?: CancellableRequest) => any | Promise<any>
 export type Stream<State> = (
   body: Body<State>,
   path: string,
@@ -95,20 +95,43 @@ export class Channel<State> {
     if (some.path) {
       const id: number | undefined = some.id
       const api = this.postApi.get(some.path) ?? this.otherPostApi.find(a => a.path(some.path))?.request
+      let task: CancellableRequest | undefined
       try {
         if (!api) throw 'api not found'
-        const body = api({ body: some.body, sender: controller.sender, state: controller.state }, some.path)
+        if (id !== undefined) {
+          task = {
+            isCancelled: false,
+            onCancel(action: () => void) {
+              if (this.cancelActions) {
+                this.cancelActions.push(action)
+              } else {
+                this.cancelActions = [action]
+              }
+            },
+            cancel() {
+              this.isCancelled = true
+              this.cancelActions?.forEach(action => action())
+              controller.response({ id, error: 'cancelled' })
+            },
+          }
+        }
+        const body = api({ body: some.body, sender: controller.sender, state: controller.state }, some.path, task)
         if (id !== undefined) {
           if (body?.then && body?.catch) {
+            if (task) controller.sender.requests.set(id, task) // we only need cancellable tasks here cause it halves the performance and reduces by 30% on Promise
             body
-              .then((a: any) => controller.response({ id, body: a }))
-              .catch((e: any) => controller.response({ id, error: `${e}` }))
+              .then((a: any) => {
+                if (!task?.isCancelled) controller.response({ id, body: a })
+              })
+              .catch((e: any) => {
+                if (!task?.isCancelled) controller.response({ id, error: `${e}` })
+              })
           } else {
             controller.response({ id, body })
           }
         }
       } catch (e) {
-        if (id !== undefined) controller.response({ id, error: `${e}` })
+        if (id !== undefined) if (!task?.isCancelled) controller.response({ id, error: `${e}` })
       }
     } else if (some.stream) {
       const id: number | undefined = some.id
@@ -123,8 +146,9 @@ export class Channel<State> {
     } else if (some.cancel !== undefined) {
       try {
         const id: number | undefined = some.cancel
-        if (id === undefined) throw 'stream requires id'
+        if (id === undefined) throw 'cancellation requires id'
         controller.sender.streams.get(id)?.return?.()
+        controller.sender.requests.get(id)?.cancel()
       } catch {}
     } else if (some.sub) {
       const id: number | undefined = some.id
@@ -340,6 +364,7 @@ export class ObjectMap<Key, Value> {
 
 export interface Sender {
   streams: ObjectMap<number, AsyncIterator<any, void, any>>
+  requests: ObjectMap<number, CancellableRequest>
   send(path: string, body?: any): Promise<any>
   request(path: string, body?: any): SendingRequest
   values(path: string, body?: any): Values
@@ -349,6 +374,11 @@ export interface Sender {
 
 export interface Cancellable {
   cancel(): void
+}
+export interface CancellableRequest extends Cancellable {
+  isCancelled: boolean
+  cancelActions?: [() => void]
+  onCancel(action: () => void): void
 }
 
 interface ConnectionInterface<RequestId = number> {
@@ -368,6 +398,7 @@ interface SendingRequest {
 export function makeSender<State>(ch: Channel<State>, connection: ConnectionInterface): Sender {
   return {
     streams: new ObjectMap<number, AsyncIterator<any, void, any>>(),
+    requests: new ObjectMap<number, CancellableRequest>(),
     async send(path: string, body?: any): Promise<any> {
       return new Promise((success, failure) => {
         let id: number | undefined
