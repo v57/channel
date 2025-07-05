@@ -51,6 +51,11 @@ export const server = new Channel<State>()
       await sleep()
     }
   })
+  .stream('stream/sync', async function* () {
+    for (let i = 0; i < 3; i += 1) {
+      yield i
+    }
+  })
   .stream('mirror/stream', async function* ({ sender }) {
     for await (const value of sender.values('stream/values')) {
       yield value
