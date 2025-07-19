@@ -1,3 +1,25 @@
+export class LazyStates<Key, T> {
+  states = new Map<Key, LazyState<T>>()
+  make: (path: Key) => T
+  constructor(make: (path: Key) => T) {
+    this.make = make
+  }
+  setNeedsUpdate(path: Key) {
+    this.states.get(path)?.setNeedsUpdate()
+  }
+  state(path: Key): LazyState<T> {
+    let state = this.states.get(path)
+    if (state) return state
+    state = new LazyState<T>(() => this.make(path))
+    this.states.set(path, state)
+    state.onDisconnect = () => this.states.delete(path)
+    return state
+  }
+  makeIterator(path: Key): LazyStateIterator<T> {
+    return this.state(path).makeIterator()
+  }
+}
+
 export class LazyState<T> {
   promise: Promise<any>
   private resolve: (value: any) => void
@@ -9,6 +31,7 @@ export class LazyState<T> {
   getValue: () => Promise<T> | T
   private minimumDelay: number = 1 / 30
   private _alwaysNeedsUpdate: boolean = false
+  onDisconnect?: () => void
   constructor(getValue: () => Promise<T> | T) {
     this.getValue = getValue
     const { promise, resolve, reject } = Promise.withResolvers()
@@ -39,6 +62,7 @@ export class LazyState<T> {
     this.subscribers -= 1
     if (this.subscribers > 0) return
     this.allowsUpdates = false
+    this.onDisconnect?.()
   }
   setNeedsUpdate() {
     const schedule = !this.needsUpdate
