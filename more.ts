@@ -4,8 +4,12 @@ export class LazyStates<Key, T> {
   constructor(make: (path: Key) => T) {
     this.make = make
   }
-  setNeedsUpdate(path: Key) {
-    this.states.get(path)?.setNeedsUpdate()
+  setNeedsUpdate(path: Key | undefined = undefined) {
+    if (path) {
+      this.states.get(path)?.setNeedsUpdate()
+    } else {
+      this.states.forEach(a => a.setNeedsUpdate())
+    }
   }
   state(path: Key): LazyState<T> {
     let state = this.states.get(path)
