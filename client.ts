@@ -66,12 +66,14 @@ export class WebSocketClient {
   queue: any[] = []
   isConnected: boolean = false
   headers?: () => any
+  isRunning = true
   constructor(address: string, headers?: () => any) {
     this.address = address
     this.headers = headers
     this.start()
   }
   async start() {
+    if (!this.isRunning) return
     // @ts-ignore
     const ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
     ws.onopen = async () => {
@@ -94,6 +96,7 @@ export class WebSocketClient {
     }
   }
   stop() {
+    this.isRunning = false
     this.pending = new ObjectMap()
     this.ws?.close()
   }
