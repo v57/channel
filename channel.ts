@@ -155,8 +155,7 @@ export class Channel<State> {
       try {
         if (!subscription) throw 'subscription not found'
         let topic = subscription._topic(some.body)
-        if (topic.length === 0) topic = subscription.prefix
-        else topic = subscription.prefix + '/' + topic
+        topic = subscription.prefix + '/' + topic
         const body = subscription._body(some.body)
         if (body?.then && body.catch) {
           body
