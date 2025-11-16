@@ -28,6 +28,7 @@ export class LazyState<T> {
   private allowsUpdates: boolean = false
   private waiting: boolean = false
   private subscribers = 0
+  lastValue?: T
   getValue: () => Promise<T> | T
   private minimumDelay: number = 1 / 30
   private _alwaysNeedsUpdate: boolean = false
@@ -73,6 +74,8 @@ export class LazyState<T> {
   }
   send(value: T) {
     this.needsUpdate = false
+    if (this.lastValue !== undefined && Bun.deepEquals(value, this.lastValue)) return
+    this.lastValue = value
     this.resolve(value)
     this.createPromise()
   }
@@ -118,7 +121,10 @@ export class LazyStateIterator<T> {
     if (!this.isStarted) {
       this.isStarted = true
       this.iterator.subscribe()
-      return { value: await this.iterator.getValue() }
+      if (this.iterator.lastValue !== undefined) return { value: this.iterator.lastValue }
+      const value = await this.iterator.getValue()
+      this.iterator.lastValue = value
+      return { value }
     }
     return { value: await this.iterator.promise }
   }
