@@ -1,6 +1,6 @@
 import type { ServerWebSocket, Server } from 'bun'
 import { Channel, makeSender, type EventBody, type SubscriptionEvent, type Sender } from './channel'
-export { Channel, type Sender, ObjectMap } from './channel'
+export { Channel, type Sender, ObjectMap, Subscription } from './channel'
 
 declare module './channel' {
   interface Channel<State> {
