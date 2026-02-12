@@ -1,6 +1,7 @@
 export class LazyStates<Key, T> {
   states = new Map<Key, LazyState<T>>()
   make: (path: Key) => T
+  private dedupeMode: 'none' | 'json' | 'equals' = 'none'
   constructor(make: (path: Key) => T) {
     this.make = make
   }
@@ -14,13 +15,17 @@ export class LazyStates<Key, T> {
   state(path: Key): LazyState<T> {
     let state = this.states.get(path)
     if (state) return state
-    state = new LazyState<T>(() => this.make(path))
+    state = new LazyState<T>(() => this.make(path)).dedupe(this.dedupeMode)
     this.states.set(path, state)
     state.onDisconnect = () => this.states.delete(path)
     return state
   }
   makeIterator(path: Key): LazyStateIterator<T> {
     return this.state(path).makeIterator()
+  }
+  dedupe(mode: 'none' | 'json' | 'equals'): this {
+    this.dedupeMode = mode
+    return this
   }
 }
 
@@ -33,9 +38,11 @@ export class LazyState<T> {
   private waiting: boolean = false
   private subscribers = 0
   lastValue?: T
+  private lastEquatable?: string
   getValue: () => Promise<T> | T
   private minimumDelay: number = 1 / 30
   private _alwaysNeedsUpdate: boolean = false
+  private dedupeMode = 0
   onDisconnect?: () => void
   constructor(getValue: () => Promise<T> | T) {
     this.getValue = getValue
@@ -50,6 +57,23 @@ export class LazyState<T> {
   }
   alwaysNeedsUpdate(): this {
     this._alwaysNeedsUpdate = true
+    return this
+  }
+  // Dedupe mode allows to ignore sending same event twice in a row
+  // 'json' will convert sending value to json and compare with previous json string
+  // 'equals' will use Bun.deepEquals. Fast but will fail if you send same object/array
+  dedupe(mode: 'none' | 'json' | 'equals'): this {
+    switch (mode) {
+      case 'json':
+        this.dedupeMode = 1
+        break
+      case 'equals':
+        this.dedupeMode = 2
+        break
+      default:
+        this.dedupeMode = 3
+        break
+    }
     return this
   }
   makeIterator() {
@@ -78,7 +102,18 @@ export class LazyState<T> {
   }
   send(value: T) {
     this.needsUpdate = false
-    if (this.lastValue !== undefined && Bun.deepEquals(value, this.lastValue)) return
+    switch (this.dedupeMode) {
+      case 1:
+        const json = stableStringify(value)
+        if (this.lastEquatable !== undefined && this.lastEquatable !== json) return
+        this.lastEquatable = json
+        break
+      case 2:
+        if (this.lastValue !== undefined && Bun.deepEquals(value, this.lastValue)) return
+        break
+      default:
+        break
+    }
     this.lastValue = value
     this.resolve(value)
     this.createPromise()
@@ -144,4 +179,35 @@ export class LazyStateIterator<T> {
   [Symbol.asyncIterator]() {
     return this
   }
+}
+function stableStringify(value: any): string {
+  const seen = new WeakMap()
+  let nextId = 0
+  const encode = (v: any) => {
+    if (v === null || typeof v !== 'object') {
+      if (typeof v === 'number') {
+        if (Number.isNaN(v)) return { $nan: 1 }
+        if (Object.is(v, -0)) return { $neg0: 1 }
+      }
+      return v
+    }
+    const ref = seen.get(v)
+    if (ref !== undefined) return { $ref: ref }
+    seen.set(v, nextId++)
+    if (Array.isArray(v)) {
+      const out = new Array(v.length)
+      for (let i = 0; i < v.length; i++) out[i] = encode(v[i])
+      return out
+    }
+    const keys = Object.keys(v)
+    keys.sort()
+    const out: any = {}
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i]
+      out[k] = encode(v[k])
+    }
+    return out
+  }
+
+  return JSON.stringify(encode(value))
 }
