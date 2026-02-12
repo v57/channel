@@ -8,7 +8,7 @@ declare module './channel' {
 }
 
 interface Options {
-  headers?(): Promise<any>
+  headers?(): any
   onConnect?(sender: Sender): Promise<void>
 }
 
@@ -82,7 +82,11 @@ export class WebSocketClient {
       await this.onopen?.()
       ws.send(JSON.stringify(this.pending.map(a => a)))
     }
-    ws.onclose = () => {
+    ws.onerror = c => {
+      // @ts-ignore
+      if (c.message?.includes('101')) this.isRunning = false // This address doesn't have websocket server or not accepting incoming connections
+    }
+    ws.onclose = c => {
       this.isConnected = false
       this.ws = undefined
       this.onclose?.()
