@@ -1,4 +1,11 @@
-export type Body<State> = { body: any; sender: Sender; state: State; path: string; task?: CancellableRequest }
+export type Body<State> = {
+  body: any
+  sender: Sender
+  state: State
+  path: string
+  context: any
+  task?: CancellableRequest
+}
 export type Function<State> = (body: Body<State>) => any | Promise<any>
 export type Stream<State> = (
   body: Body<State>,
@@ -53,32 +60,47 @@ export class Channel<State> {
     } catch {}
     sender.streams.forEach(a => a?.return?.())
   }
-  makeRequest(path: string, body: any | undefined, response: (response: Response) => void): Request {
+  makeRequest(
+    path: string,
+    body: any | undefined,
+    context: any | undefined,
+    response: (response: Response) => void,
+  ): Request {
     const id = this.id++
     const pending: PendingRequest = {
-      request: { id, path, body },
+      request: { id, path, body, context },
       response,
     }
     this.requests.set(id, pending)
-    return { id, path, body }
+    return { id, path, body, context }
   }
-  makeStream(stream: string, body: any | undefined, response: (response: Response) => void): StreamRequest {
+  makeStream(
+    stream: string,
+    body: any | undefined,
+    context: any | undefined,
+    response: (response: Response) => void,
+  ): StreamRequest {
     const id = this.id++
     const pending: PendingRequest = {
-      request: { id, stream, body },
+      request: { id, stream, body, context },
       response,
     }
     this.requests.set(id, pending)
-    return { id, stream, body }
+    return { id, stream, body, context }
   }
-  makeSubscription(sub: string, body: any | undefined, response: (response: Response) => void): SubscriptionRequest {
+  makeSubscription(
+    sub: string,
+    body: any | undefined,
+    context: any | undefined,
+    response: (response: Response) => void,
+  ): SubscriptionRequest {
     const id = this.id++
     const pending: PendingRequest = {
-      request: { id, sub, body },
+      request: { id, sub, body, context },
       response,
     }
     this.requests.set(id, pending)
-    return { id, sub, body }
+    return { id, sub, body, context }
   }
   cancel(id: number) {
     this.requests.delete(id)
@@ -114,7 +136,14 @@ export class Channel<State> {
             },
           }
         }
-        const body = api({ body: some.body, sender: controller.sender, state: controller.state, path: some.path, task })
+        const body = api({
+          body: some.body,
+          context: some.context ?? {},
+          sender: controller.sender,
+          state: controller.state,
+          path: some.path,
+          task,
+        })
         if (id !== undefined) {
           if (body?.then && body?.catch) {
             if (task) controller.sender.requests.set(id, task) // we only need cancellable tasks here cause it halves the performance and reduces by 30% on Promise
@@ -138,7 +167,7 @@ export class Channel<State> {
         const api = this.streamApi.get(some.stream) ?? this.otherStreamApi.find(a => a.path(some.stream))?.request
         if (!api) throw 'api not found'
         if (id === undefined) throw 'stream requires id'
-        this.streamRequest(id, controller, some.stream, some.body, api)
+        this.streamRequest(id, controller, some.stream, some.body, api, some.context ?? {})
       } catch (e) {
         if (id !== undefined) controller.response({ id, error: `${e}` })
       }
@@ -194,10 +223,11 @@ export class Channel<State> {
     controller: Controller<State>,
     path: string,
     body: any,
+    context: any,
     stream: Stream<State>,
   ) {
     try {
-      const values = await stream({ body, sender: controller.sender, state: controller.state, path })
+      const values = await stream({ body, sender: controller.sender, state: controller.state, path, context })
       controller.sender.streams.set(id, values)
       try {
         while (true) {
@@ -266,16 +296,19 @@ interface Request {
   id: number
   path: string
   body?: any
+  context?: any
 }
 interface SubscriptionRequest {
   id: number
   sub: string
   body?: any
+  context?: any
 }
 interface StreamRequest {
   id: number
   stream: string
   body?: any
+  context?: any
 }
 export interface Response {
   id: number
@@ -367,10 +400,10 @@ export class ObjectMap<Key, Value> {
 export interface Sender {
   streams: ObjectMap<number, AsyncIterator<any, void, any>>
   requests: ObjectMap<number, CancellableRequest>
-  send(path: string, body?: any): Promise<any>
-  request(path: string, body?: any): SendingRequest
-  values(path: string, body?: any): Values
-  subscribe(path: string, body: any | undefined, event: (body: any) => void): Promise<Cancellable>
+  send(path: string, body?: any, context?: any): Promise<any>
+  request(path: string, body?: any, context?: any): SendingRequest
+  values(path: string, body?: any, context?: any): Values
+  subscribe(path: string, body: any | undefined, event: (body: any) => void, context?: any): Promise<Cancellable>
   stop(): void
 }
 
@@ -401,10 +434,10 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
   return {
     streams: new ObjectMap<number, AsyncIterator<any, void, any>>(),
     requests: new ObjectMap<number, CancellableRequest>(),
-    async send(path: string, body?: any): Promise<any> {
+    async send(path: string, body?: any, context?: any): Promise<any> {
       return new Promise((success, failure) => {
         let id: number | undefined
-        const request = ch.makeRequest(path, body, response => {
+        const request = ch.makeRequest(path, body, context, response => {
           if (response.error) {
             failure(response.error)
           } else {
@@ -417,11 +450,11 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         id = connection.send(request)
       })
     },
-    request(path: string, body?: any): SendingRequest {
+    request(path: string, body?: any, context?: any): SendingRequest {
       let id: number | undefined
       let rid: number | undefined
       const response = new Promise((success, failure) => {
-        const request = ch.makeRequest(path, body, response => {
+        const request = ch.makeRequest(path, body, context, response => {
           if (response.error) {
             failure(response.error)
           } else {
@@ -444,12 +477,13 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         },
       }
     },
-    values(path: string, body?: any) {
+    values(path: string, body?: any, context?: any) {
       let id: number | undefined
       return new Values(
         ch,
         path,
         body,
+        context,
         body => (id = connection.send(body)),
         rid => {
           if (id !== undefined && !connection.cancel(id)) {
@@ -458,9 +492,9 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         },
       )
     },
-    async subscribe(path: string, body: any, event: (body: any) => void): Promise<Cancellable> {
+    async subscribe(path: string, body: any, context: any | undefined, event: (body: any) => void): Promise<Cancellable> {
       return new Promise((success, failure) => {
-        const request = ch.makeSubscription(path, body, response => {
+        const request = ch.makeSubscription(path, body, context, response => {
           if (response.error) {
             failure(response.error)
           } else {
@@ -489,6 +523,7 @@ class Values {
   ch: Channel<any>
   path: string
   body: any | undefined
+  context?: any
   isRunning = false
   pending: ((response: Response) => void)[] = []
   queued: Response[] = []
@@ -499,12 +534,14 @@ class Values {
     ch: Channel<any>,
     path: string,
     body: any | undefined,
+    context: any | undefined,
     onSend: (body: any) => void,
     onCancel: (id: number) => void,
   ) {
     this.ch = ch
     this.path = path
     this.body = body
+    this.context = context
     this.onSend = onSend
     this.onCancel = onCancel
   }
@@ -512,7 +549,7 @@ class Values {
   private start() {
     if (this.isRunning) return
     this.isRunning = true
-    const request = this.ch.makeStream(this.path, this.body, response => {
+    const request = this.ch.makeStream(this.path, this.body, this.context, response => {
       const pendingPromise = this.pending.shift()
       if (pendingPromise) {
         pendingPromise(response)
