@@ -492,7 +492,12 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         },
       )
     },
-    async subscribe(path: string, body: any, context: any | undefined, event: (body: any) => void): Promise<Cancellable> {
+    async subscribe(
+      path: string,
+      body: any,
+      event: (body: any) => void,
+      context: any | undefined,
+    ): Promise<Cancellable> {
       return new Promise((success, failure) => {
         const request = ch.makeSubscription(path, body, context, response => {
           if (response.error) {
