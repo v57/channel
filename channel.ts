@@ -167,7 +167,7 @@ export class Channel<State> {
         const api = this.streamApi.get(some.stream) ?? this.otherStreamApi.find(a => a.path(some.stream))?.request
         if (!api) throw 'api not found'
         if (id === undefined) throw 'stream requires id'
-        this.streamRequest(id, controller, some.stream, some.body, api, some.context ?? {})
+        this.streamRequest(id, controller, some.stream, some.body, some.context ?? {}, api)
       } catch (e) {
         if (id !== undefined) controller.response({ id, error: `${e}` })
       }
