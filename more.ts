@@ -105,7 +105,7 @@ export class LazyState<T> {
     switch (this.dedupeMode) {
       case 1:
         const json = stableStringify(value)
-        if (this.lastEquatable !== undefined && this.lastEquatable !== json) return
+        if (this.lastEquatable !== undefined && this.lastEquatable === json) return
         this.lastEquatable = json
         break
       case 2:
