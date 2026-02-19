@@ -65,17 +65,32 @@ export class WebSocketClient {
   private isWaitingLength = 0
   queue: any[] = []
   isConnected: boolean = false
-  headers?: () => any
+  headers?: () => Record<string, string> | Promise<Record<string, string>>
   isRunning = true
-  constructor(address: string, headers?: () => any) {
+  constructor(address: string, headers?: () => Record<string, string> | Promise<Record<string, string>>) {
     this.address = address
     this.headers = headers
     this.start()
   }
   async start() {
     if (!this.isRunning) return
-    // @ts-ignore
-    const ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
+
+    let ws: WebSocket
+    if (this.headers) {
+      if (Bun?.env) {
+        // @ts-ignore
+        ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
+      } else {
+        const url = new URL(this.address)
+        const headers = await this.headers()
+        Object.entries(headers).forEach(([key, value]) => {
+          if (value) url.searchParams.set(key, value)
+        })
+        ws = new WebSocket(this.address)
+      }
+    } else {
+      ws = new WebSocket(this.address)
+    }
     ws.onopen = async () => {
       this.isConnected = true
       this.ws = ws
@@ -84,7 +99,7 @@ export class WebSocketClient {
     }
     ws.onerror = c => {
       // @ts-ignore
-      if (c.message?.includes('101')) this.isRunning = false // This address doesn't have websocket server or not accepting incoming connections
+      if (c?.message?.includes('101')) this.isRunning = false // This address doesn't have websocket server or not accepting incoming connections
     }
     ws.onclose = c => {
       this.isConnected = false
