@@ -15,7 +15,7 @@ export interface BodyContext<State> {
 }
 
 export interface ListenOptions<State> {
-  state?: (headers: Headers) => Promise<State> | State
+  state?: (headers: Record<string, string | undefined>) => Promise<State> | State
   onConnect?: (connection: BodyContext<State>) => void
   onDisconnect?: (connection: BodyContext<State>) => void
 }
@@ -60,7 +60,15 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
     port,
     hostname,
     async fetch(req, server) {
-      if (server.upgrade(req, { data: { state: (await options?.state?.(req.headers)) ?? {} } })) return
+      const makeState = options?.state
+      if (makeState) {
+        let headers: Record<string, string | undefined> = {}
+        new URL(req.url).searchParams.forEach((value, key) => (headers[key] = value))
+        req.headers.forEach((value, key) => (headers[key] = value))
+        if (server.upgrade(req, { data: { state: await makeState(headers) } })) return
+      } else {
+        if (server.upgrade(req, { data: { state: {} } })) return
+      }
       return new Response()
     },
     websocket: {
