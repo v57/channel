@@ -77,7 +77,7 @@ export class WebSocketClient {
 
     let ws: WebSocket
     if (this.headers) {
-      if (Bun?.env) {
+      if (globalThis.Bun?.env) {
         // @ts-ignore
         ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
       } else {
