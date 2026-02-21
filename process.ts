@@ -40,7 +40,9 @@ class Interface<State> {
   cancel(): boolean {
     return false
   }
-  notify(): void {}
+  notify(body: any): void {
+    this.ch.receive(body, this.controller)
+  }
   addTopic(): () => boolean {
     return () => false
   }

@@ -207,7 +207,12 @@ export class Channel<State> {
         const id: number | undefined = some.cancel
         if (id === undefined) throw 'cancellation requires id'
         controller.sender.streams.get(id)?.return?.()
-        controller.sender.requests.get(id)?.cancel()
+        controller.sender.streams.delete(id)
+        const request = controller.sender.requests.get(id)
+        if (request) {
+          request.cancel()
+          controller.sender.requests.delete(id)
+        }
       } catch {}
     } else if (some.sub) {
       const id: number | undefined = some.id
@@ -524,8 +529,17 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
       return {
         response,
         cancel() {
-          if (id) connection.cancel(id)
-          if (rid) ch.cancel(rid)
+          if (id !== undefined) {
+            const cancelled = connection.cancel(id)
+            if (!cancelled && rid !== undefined) {
+              connection.notify({ cancel: rid })
+            }
+          } else if (rid !== undefined) {
+            connection.notify({ cancel: rid })
+          }
+          if (rid !== undefined) ch.cancel(rid)
+          id = undefined
+          rid = undefined
         },
       }
     },
@@ -639,6 +653,8 @@ class Values {
     return { value: response.body, done: response.done ? true : false }
   }
   async next(): Promise<IteratorValue<any>> {
+    const queued = this.queued.shift()
+    if (queued) return this.processResponse(queued)
     const result = new Promise<IteratorValue<any>>((success, failure) => {
       this.pending.push(value => {
         try {

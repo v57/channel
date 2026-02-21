@@ -160,6 +160,9 @@ export class WebSocketClient {
       case 1:
         this.ws.send(JSON.stringify(body))
         this.isWaitingLength += 1
+        if (this.isWaitingLength > 4000) {
+          this.isWaiting = 3
+        }
         break
       case 2:
         this.queue.push(body)
