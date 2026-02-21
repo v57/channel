@@ -201,7 +201,7 @@ function stableStringify(value: any): string {
     }
     const keys = Object.keys(v)
     keys.sort()
-    const out: any = {}
+    const out: any = Object.create(null)
     for (let i = 0; i < keys.length; i++) {
       const k = keys[i]
       out[k] = encode(v[k])

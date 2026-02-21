@@ -21,7 +21,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
   const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`, options.headers)
   let topics = new Set<string>()
   const sender = makeSender(ch, ws)
-  let state = {}
+  let state = Object.create(null)
   const onConnect = options.onConnect
   if (onConnect) ws.onopen = () => onConnect(sender)
   const controller = {

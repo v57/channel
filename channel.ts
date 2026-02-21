@@ -366,18 +366,24 @@ export class Subscription {
 }
 
 export class ObjectMap<Key, Value> {
-  storage: any = {}
+  storage: any = Object.create(null)
   size = 0
   get(id: Key): Value | undefined {
     return this.storage[id]
   }
-  set(id: Key, value: Value) {
+  uncheckedSet(id: Key, value: Value) {
     this.size += 1
     this.storage[id] = value
   }
+  set(id: Key, value: Value) {
+    if (!this.storage[id]) this.size += 1
+    this.storage[id] = value
+  }
   delete(id: Key) {
-    this.size -= 1
-    delete this.storage[id]
+    if (this.storage[id]) {
+      this.size -= 1
+      delete this.storage[id]
+    }
   }
   map<O>(transform: (value: Value) => O): O[] {
     let array: O[] = []
@@ -392,7 +398,7 @@ export class ObjectMap<Key, Value> {
     }
   }
   clear() {
-    this.storage = {}
+    this.storage = Object.create(null)
     this.size = 0
   }
 }

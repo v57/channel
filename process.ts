@@ -12,7 +12,7 @@ Channel.prototype.process = function () {
   const ch = this
   const connection = new Interface(ch)
   const sender = makeSender(ch, connection)
-  let state = {}
+  let state = Object.create(null)
   connection.controller = {
     response(body: any) {
       ch.receive(body, this)

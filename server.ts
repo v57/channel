@@ -62,7 +62,7 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
     async fetch(req, server) {
       const makeState = options?.state
       if (makeState) {
-        let headers: Record<string, string | undefined> = {}
+        let headers: Record<string, string | undefined> = Object.create(null)
         new URL(req.url).searchParams.forEach((value, key) => (headers[key] = value))
         req.headers.forEach((value, key) => (headers[key] = value))
         if (server.upgrade(req, { data: { state: await makeState(headers) } })) return
