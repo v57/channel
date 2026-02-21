@@ -101,23 +101,27 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
       },
       message(ws: ServerWebSocket<BodyContext<State>>, message: any) {
         if (typeof message !== 'string') return
-        const req = JSON.parse(message)
-        channel.receive(req, {
-          response(body: string) {
-            ws.send(JSON.stringify(body))
-          },
-          subscribe(topic: string) {
-            ws.subscribe(topic)
-          },
-          unsubscribe(topic: string) {
-            ws.unsubscribe(topic)
-          },
-          event(topic: string, event: any) {
-            ws.data.subscriptions.receivedEvent(topic, event)
-          },
-          sender: ws.data.sender,
-          state: ws.data.state,
-        })
+        try {
+          const req = JSON.parse(message)
+          channel.receive(req, {
+            response(body: string) {
+              ws.send(JSON.stringify(body))
+            },
+            subscribe(topic: string) {
+              ws.subscribe(topic)
+            },
+            unsubscribe(topic: string) {
+              ws.unsubscribe(topic)
+            },
+            event(topic: string, event: any) {
+              ws.data.subscriptions.receivedEvent(topic, event)
+            },
+            sender: ws.data.sender,
+            state: ws.data.state,
+          })
+        } catch {
+          ws.close()
+        }
       },
     },
   })
