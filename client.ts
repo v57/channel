@@ -1,4 +1,5 @@
-import { Channel, ObjectMap, type EventBody, makeSender, type Sender, type SubscriptionEvent } from './channel'
+import { Channel, ObjectMap, makeSender } from './channel'
+import type { EventBody, Sender, SubscriptionEvent, Subscription } from './channel'
 export { Channel, ObjectMap, type Sender } from './channel'
 
 declare module './channel' {
@@ -40,16 +41,36 @@ Channel.prototype.connect = function (address: string | number, options: Options
     sender,
     state,
   }
-  ws.onclose = () => ch.disconnect(state, sender)
+  const publishers: Array<{
+    subscription: Subscription
+    publish: { publish(event: SubscriptionEvent): void }
+  }> = []
+  let removedPublishers = false
+  const cleanupPublishers = () => {
+    if (removedPublishers) return
+    removedPublishers = true
+    for (const item of publishers) {
+      const index = item.subscription.publishers.indexOf(item.publish)
+      if (index >= 0) item.subscription.publishers.splice(index, 1)
+    }
+  }
+  ws.onclose = () => {
+    if (!ws.isRunning) {
+      cleanupPublishers()
+    }
+    ch.disconnect(state, sender)
+  }
   ws.onmessage = message => ch.receive(message, controller)
-  this.eventsApi?.forEach(a =>
-    a.publishers.push({
+  this.eventsApi?.forEach(subscription => {
+    const publisher = {
       publish(event: SubscriptionEvent) {
         if (!topics.has(event.topic)) return
         ws.send(event)
       },
-    }),
-  )
+    }
+    subscription.publishers.push(publisher)
+    publishers.push({ subscription, publish: publisher })
+  })
   return { ...sender, ws }
 }
 
