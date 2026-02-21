@@ -410,11 +410,11 @@ export class ObjectMap<Key, Value> {
     this.storage[id] = value
   }
   set(id: Key, value: Value) {
-    if (!this.storage[id]) this.size += 1
+    if (this.storage[id] === undefined) this.size += 1
     this.storage[id] = value
   }
   delete(id: Key) {
-    if (this.storage[id]) {
+    if (this.storage[id] !== undefined) {
       this.size -= 1
       delete this.storage[id]
     }
