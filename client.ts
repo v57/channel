@@ -75,6 +75,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
 }
 
 export class WebSocketClient {
+  static isBun = !!globalThis.Bun?.env
   id = 0
   address: string
   ws?: WebSocket
@@ -98,7 +99,7 @@ export class WebSocketClient {
 
     let ws: WebSocket
     if (this.headers) {
-      if (globalThis.Bun?.env) {
+      if (WebSocketClient.isBun) {
         // @ts-ignore
         ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
       } else {

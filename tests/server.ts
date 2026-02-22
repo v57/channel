@@ -41,12 +41,6 @@ export const server = new Channel<State>()
       throw 'unauthorized'
     }
   })
-  // Sends 3 events with 0, 1, 2 numbers
-  .stream('stream/sync', async function* () {
-    for (let i = 0; i < 3; i += 1) {
-      yield i
-    }
-  })
   // Sends 3 events with 0, 1, 2 numbers after some delay
   // When client uses `break` in the loop, it will send the cancel request and this async function* will automatically close itself (yield will work like return)
   // Good for llm progressive response
@@ -80,22 +74,13 @@ export const server = new Channel<State>()
   })
   // Api for mirror cancellation tests
   .stream('mirror/stream/cancel', async function* ({ sender }) {
-    for await (const value of sender.values('stream/cancel')) {
-      yield value
-    }
+    for await (const value of sender.values('stream/cancel')) yield value
   })
   // Sets the events
   .events(events)
   // Adds api from another Channel (State type should be the same)
   .merge(
-    new Channel<State>()
-      .api({
-        hello: () => 'world',
-        *stream() {},
-      })
-      .events({
-        never: new Subscription(),
-      }),
+    new Channel<State>().api({ hello: () => 'world', *stream() {} }).events({ never: new Subscription() }),
     'merged',
   )
   // Listens to 127.0.0.1:2049
