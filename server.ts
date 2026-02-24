@@ -48,7 +48,7 @@ class Subscriptions {
 Channel.prototype.listen = function <State>(address: number | string, options?: ListenOptions<State>): Server {
   const channel = this
   let port: number
-  let hostname: string = '127.0.0.1'
+  let hostname: string = '0.0.0.0'
   if (typeof address === 'string') {
     const [h, p] = address.split(':')
     hostname = h
