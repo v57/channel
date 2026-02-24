@@ -552,9 +552,13 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         context,
         body => (id = connection.send(body)),
         rid => {
-          if (id !== undefined && !connection.cancel(id)) {
+          if (id !== undefined) {
+            if (!connection.cancel(id)) connection.send({ cancel: rid })
+          } else {
             connection.send({ cancel: rid })
           }
+          ch.cancel(rid)
+          id = undefined
         },
         sender,
       )
@@ -675,6 +679,7 @@ class Values {
   private cancel() {
     if (this.rid === undefined) return
     this.onCancel(this.rid)
+    this.rid = undefined
   }
   [Symbol.asyncIterator]() {
     return this

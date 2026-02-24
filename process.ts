@@ -28,12 +28,12 @@ Channel.prototype.process = function () {
 
 class Interface<State> {
   ch: Channel<State>
-  controller!: Controller<State>
+  controller?: Controller<State>
   constructor(ch: Channel<State>) {
     this.ch = ch
   }
   send(body: any): number {
-    this.ch.receive(body, this.controller)
+    if (this.controller) this.ch.receive(body, this.controller)
     return 0
   }
   sent(): void {}
@@ -41,10 +41,15 @@ class Interface<State> {
     return false
   }
   notify(body: any): void {
-    this.ch.receive(body, this.controller)
+    if (this.controller) this.ch.receive(body, this.controller)
   }
   addTopic(): () => boolean {
     return () => false
   }
-  stop(): void {}
+  stop(): void {
+    if (!this.controller) return
+    const { state, sender } = this.controller
+    this.controller = undefined
+    this.ch.disconnect(state, sender)
+  }
 }

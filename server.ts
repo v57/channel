@@ -131,5 +131,19 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
     },
   }
   this.eventsApi?.forEach(a => a.publishers.push(publisher))
+  let removedPublisher = false
+  const cleanupPublisher = () => {
+    if (removedPublisher) return
+    removedPublisher = true
+    this.eventsApi?.forEach(subscription => {
+      const index = subscription.publishers.indexOf(publisher)
+      if (index >= 0) subscription.publishers.splice(index, 1)
+    })
+  }
+  const stop = ws.stop.bind(ws)
+  ;(ws as any).stop = (...args: any[]) => {
+    cleanupPublisher()
+    return stop(...args)
+  }
   return ws
 }
