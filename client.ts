@@ -75,7 +75,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
 }
 
 export class WebSocketClient {
-  static isBun = !!globalThis.Bun?.env
+  static isBun = globalThis.Bun?.env ? true : false
   id = 0
   address: string
   ws?: WebSocket
@@ -108,7 +108,7 @@ export class WebSocketClient {
         Object.entries(headers).forEach(([key, value]) => {
           if (value) url.searchParams.set(key, value)
         })
-        ws = new WebSocket(this.address)
+        ws = new WebSocket(url.toString())
       }
     } else {
       ws = new WebSocket(this.address)
