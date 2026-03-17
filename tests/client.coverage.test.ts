@@ -51,7 +51,7 @@ test('WebSocketClient covers browser headers path and 101 onerror handling', asy
     const ws = FakeWebSocket.instances[0]
     await waitFor(() => typeof ws.onerror === 'function')
 
-    expect(ws.address).toBe('ws://localhost:9999')
+    expect(ws.address).toBe('ws://localhost:9999/?token=abc')
     expect(ws.options).toBeUndefined()
     expect(client.isRunning).toBe(true)
 
