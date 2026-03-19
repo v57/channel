@@ -445,11 +445,20 @@ export class ObjectMap<Key, Value> {
 export interface Sender {
   streams: ObjectMap<number, AsyncIterator<any, void, any>>
   requests: ObjectMap<number, CancellableRequest>
-  send(path: string, body?: any, context?: any): Promise<any>
-  request(path: string, body?: any, context?: any): SendingRequest
-  values(path: string, body?: any, context?: any): Values
-  subscribe(path: string, body: any | undefined, event: (body: any) => void, context?: any): Promise<Cancellable>
+  send(path: string, body?: any, options?: SendOptions): Promise<any>
+  request(path: string, body?: any, options?: SendOptions): SendingRequest
+  values(path: string, body?: any, options?: SendOptions): Values
+  subscribe(
+    path: string,
+    body: any | undefined,
+    event: (body: any) => void,
+    options?: SendOptions,
+  ): Promise<Cancellable>
   stop(): void
+}
+
+export interface SendOptions {
+  context?: any
 }
 
 export interface Cancellable {
@@ -479,13 +488,13 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
   const sender: Sender = {
     streams: new ObjectMap<number, AsyncIterator<any, void, any>>(),
     requests: new ObjectMap<number, CancellableRequest>(),
-    async send(path: string, body?: any, context?: any): Promise<any> {
+    async send(path: string, body?: any, options?: SendOptions): Promise<any> {
       return new Promise((success, failure) => {
         let id: number | undefined
         const request = ch.makeRequest(
           path,
           body,
-          context,
+          options?.context,
           response => {
             if (response.error) {
               failure(response.error)
@@ -501,14 +510,14 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         id = connection.send(request)
       })
     },
-    request(path: string, body?: any, context?: any): SendingRequest {
+    request(path: string, body?: any, options?: SendOptions): SendingRequest {
       let id: number | undefined
       let rid: number | undefined
       const response = new Promise((success, failure) => {
         const request = ch.makeRequest(
           path,
           body,
-          context,
+          options?.context,
           response => {
             if (response.error) {
               failure(response.error)
@@ -543,13 +552,13 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         },
       }
     },
-    values(path: string, body?: any, context?: any) {
+    values(path: string, body?: any, options?: SendOptions) {
       let id: number | undefined
       return new Values(
         ch,
         path,
         body,
-        context,
+        options,
         body => (id = connection.send(body)),
         rid => {
           if (id !== undefined) {
@@ -563,17 +572,12 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         sender,
       )
     },
-    async subscribe(
-      path: string,
-      body: any,
-      event: (body: any) => void,
-      context: any | undefined,
-    ): Promise<Cancellable> {
+    async subscribe(path: string, body: any, event: (body: any) => void, options?: SendOptions): Promise<Cancellable> {
       return new Promise((success, failure) => {
         const request = ch.makeSubscription(
           path,
           body,
-          context,
+          options?.context,
           response => {
             if (response.error) {
               failure(response.error)
@@ -606,7 +610,7 @@ class Values {
   ch: Channel<any>
   path: string
   body: any | undefined
-  context?: any
+  options?: SendOptions
   isRunning = false
   pending: ((response: Response) => void)[] = []
   queued: Response[] = []
@@ -618,7 +622,7 @@ class Values {
     ch: Channel<any>,
     path: string,
     body: any | undefined,
-    context: any | undefined,
+    options: SendOptions | undefined,
     onSend: (body: any) => void,
     onCancel: (id: number) => void,
     sender: Sender,
@@ -626,7 +630,7 @@ class Values {
     this.ch = ch
     this.path = path
     this.body = body
-    this.context = context
+    this.options = options
     this.onSend = onSend
     this.onCancel = onCancel
     this.sender = sender
@@ -638,7 +642,7 @@ class Values {
     const request = this.ch.makeStream(
       this.path,
       this.body,
-      this.context,
+      this.options?.context,
       response => {
         const pendingPromise = this.pending.shift()
         if (pendingPromise) {
