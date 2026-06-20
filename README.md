@@ -3,6 +3,8 @@
   &nbsp;channel
 </h1>
 
+Powerful and lightweight communication built for modern language. Run websocket server, client and even use it inside your process to communicate with different parts of your apps. It supports async and AsyncIterator out of the box.
+
 # Installation
 `bun add v57/channel`
 
