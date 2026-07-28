@@ -386,7 +386,7 @@ export class Subscription {
     this._topic = make
   }
   body(make: (body: any) => any) {
-    this._topic = make
+    this._body = make
   }
   send(request: any, body?: any) {
     const topic = this._topic(request)
