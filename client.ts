@@ -130,10 +130,16 @@ export class WebSocketClient {
       setTimeout(() => this.start(), 100)
     }
     ws.onmessage = (message: MessageEvent<any>) => {
-      if (typeof message.data === 'string') {
-        const value = JSON.parse(message.data)
-        this.onmessage?.(value)
+      if (typeof message.data !== 'string') return
+      let value: any
+      try {
+        value = JSON.parse(message.data)
+      } catch {
+        // Same as the server: a peer that sends invalid JSON gets disconnected
+        ws.close()
+        return
       }
+      this.onmessage?.(value)
     }
   }
   stop() {

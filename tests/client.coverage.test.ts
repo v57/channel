@@ -64,3 +64,32 @@ test('WebSocketClient covers browser headers path and 101 onerror handling', asy
     ;(WebSocketClient as any).isBun = originalHasBunEnv
   }
 })
+
+test('WebSocketClient closes the socket on an unparseable message instead of throwing', async () => {
+  const originalWebSocket = globalThis.WebSocket
+  FakeWebSocket.instances.splice(0)
+  ;(globalThis as any).WebSocket = FakeWebSocket as any
+
+  try {
+    const client = new WebSocketClient('ws://localhost:9999')
+    const received: any[] = []
+    client.onmessage = value => received.push(value)
+    await waitFor(() => FakeWebSocket.instances.length === 1)
+    const ws = FakeWebSocket.instances[0]
+    let closed = 0
+    ws.close = () => {
+      closed += 1
+    }
+
+    expect(() => ws.onmessage?.({ data: '{not json' })).not.toThrow()
+    expect(closed).toBe(1)
+    expect(received).toEqual([])
+
+    ws.onmessage?.({ data: '{"id":1,"body":2}' })
+    expect(received).toEqual([{ id: 1, body: 2 }])
+
+    client.isRunning = false
+  } finally {
+    ;(globalThis as any).WebSocket = originalWebSocket
+  }
+})

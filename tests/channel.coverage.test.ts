@@ -239,7 +239,11 @@ test('Subscription.topic and body can both replace topic formatter', () => {
   subscription.body((body: string) => `body-${body}`)
   subscription.send('x', 'payload')
 
-  expect(events).toEqual([{ topic: 'body-x', body: 'payload' }])
+  expect(events).toEqual([{ topic: 'topic-x', body: 'payload' }])
+
+  // Without an explicit body, the body formatter builds it from the request
+  subscription.send('y')
+  expect(events[1]).toEqual({ topic: 'topic-y', body: 'body-y' })
 })
 
 test('ObjectMap.uncheckedSet increments size without key checks', () => {
