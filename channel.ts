@@ -299,10 +299,14 @@ export class Channel<State> {
   merge(channel: Channel<State>, prefix = '') {
     let p = prefix.length ? prefix + '/' : ''
     if (channel.eventsApi) {
-      this.events(channel.events, prefix)
+      this.events(channel.eventsApi, prefix)
     }
     channel.postApi.forEach((value, key) => this.post(p + key, value))
     channel.streamApi.forEach((value, key) => this.stream(p + key, value))
+    const scoped = (match: (path: string) => boolean) =>
+      p.length ? (path: string) => path.startsWith(p) && match(path.slice(p.length)) : match
+    channel.otherPostApi.forEach(a => this.postOther(scoped(a.path), a.request))
+    channel.otherStreamApi.forEach(a => this.streamOther(scoped(a.path), a.request))
     return this
   }
   private _parseApi(api: Api<State>, prefix: string) {

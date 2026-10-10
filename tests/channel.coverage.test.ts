@@ -311,3 +311,31 @@ test('makeSender.request cancel notifies by request id when send id is missing',
   expect(notifyBodies).toEqual([{ cancel: rid }])
   expect(ch.requests.size).toBe(0)
 })
+
+test('merge copies subscriptions and postOther/streamOther routes under the prefix', async () => {
+  const inner = new Channel<any>()
+    .events({ ticks: new Subscription() })
+    .postOther(path => path.startsWith('dyn/'), ({ body }) => `post:${body}`)
+    .streamOther(path => path === 'feed', async function* () {
+      yield 1
+    })
+  const outer = new Channel<any>().merge(inner, 'm')
+
+  expect([...outer.eventsApi!.keys()]).toEqual(['m/ticks'])
+  expect(outer.otherPostApi.length).toBe(1)
+  expect(outer.otherPostApi[0].path('m/dyn/x')).toBe(true)
+  expect(outer.otherPostApi[0].path('dyn/x')).toBe(false)
+  expect(outer.otherStreamApi[0].path('m/feed')).toBe(true)
+
+  const { controller, responses, subscriptions } = createController(createSender())
+  outer.receive({ id: 1, path: 'm/dyn/x', body: 'a' }, controller)
+  outer.receive({ id: 2, sub: 'm/ticks', body: 'x' }, controller)
+  await new Promise(resolve => setTimeout(resolve, 0))
+  expect(responses).toContainEqual({ id: 1, body: 'post:a' })
+  expect(subscriptions).toEqual(['ticks/x'])
+
+  // Without a prefix the matchers are reused as-is
+  const flat = new Channel<any>().merge(inner)
+  expect([...flat.eventsApi!.keys()]).toEqual(['ticks'])
+  expect(flat.otherPostApi[0].path('dyn/x')).toBe(true)
+})
