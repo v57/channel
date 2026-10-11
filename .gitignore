@@ -2,3 +2,5 @@ trash/
 node_modules/
 .DS_Store
 coverage/
+CLAUDE.md
+/.claude
