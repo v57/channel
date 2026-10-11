@@ -58,7 +58,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
     if (!ws.isRunning) {
       cleanupPublishers()
     }
-    ch.disconnect(state, sender)
+    ch.disconnect(state, sender, ws.isRunning)
   }
   ws.onmessage = message => ch.receive(message, controller)
   this.eventsApi?.forEach(subscription => {

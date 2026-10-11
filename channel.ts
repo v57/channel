@@ -54,7 +54,8 @@ export class Channel<State> {
     this._onDisconnect = action
     return this
   }
-  disconnect(state: State, sender: Sender) {
+  /** `reconnecting`: the client will replay its unanswered requests, so their responses are still awaited */
+  disconnect(state: State, sender: Sender, reconnecting = false) {
     try {
       this._onDisconnect?.(state, sender)
     } catch {}
@@ -71,13 +72,14 @@ export class Channel<State> {
         } catch {}
       })
     })
+    sender.streams.clear()
+    sender.requests.clear()
+    if (reconnecting) return
     const toDelete: number[] = []
     this.requests.forEach((request, key) => {
       if (request.request.sender === sender) toDelete.push(key as unknown as number)
     })
     for (const id of toDelete) this.requests.delete(id)
-    sender.streams.clear()
-    sender.requests.clear()
   }
   makeRequest(
     path: string,
