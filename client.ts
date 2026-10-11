@@ -8,9 +8,19 @@ declare module './channel' {
   }
 }
 
-interface Options {
+export interface Options {
   headers?(): any
   onConnect?(sender: Sender): Promise<void>
+}
+
+/** What the client needs from a socket. Other transports (`quic.ts`) register one for their address scheme. */
+export interface Socket {
+  onopen: ((event: any) => void) | null
+  onclose: ((event: any) => void) | null
+  onerror: ((event: any) => void) | null
+  onmessage: ((event: any) => void) | null
+  send(data: string): void
+  close(): void
 }
 
 interface ClientSender extends Sender {
@@ -19,7 +29,7 @@ interface ClientSender extends Sender {
 
 Channel.prototype.connect = function (address: string | number, options: Options = {}) {
   const ch = this
-  const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`, options.headers)
+  const ws = new WebSocketTopics(typeof address === 'string' ? address : `ws://localhost:${address}`, options.headers, options)
   let topics = new Set<string>()
   const sender = makeSender(ch, ws)
   let state = Object.create(null)
@@ -76,9 +86,12 @@ Channel.prototype.connect = function (address: string | number, options: Options
 
 export class WebSocketClient {
   static isBun = globalThis.Bun?.env ? true : false
+  /** Socket types by address scheme (`quic` once `channel/quic` is imported), WebSocket for the rest */
+  static sockets: Record<string, new (address: string, headers: Record<string, string>, options: Options) => Socket> = {}
   id = 0
   address: string
-  ws?: WebSocket
+  options: Options
+  ws?: Socket
   onopen: (() => Promise<void>) | undefined
   onclose?: () => void
   onmessage: ((message: any) => void) | undefined
@@ -91,16 +104,24 @@ export class WebSocketClient {
   isRunning = true
   /** Failed connection attempts since the last open, drives the reconnect backoff */
   attempts = 0
-  constructor(address: string, headers?: () => Record<string, string> | Promise<Record<string, string>>) {
+  constructor(
+    address: string,
+    headers?: () => Record<string, string> | Promise<Record<string, string>>,
+    options: Options = {},
+  ) {
     this.address = address
     this.headers = headers
+    this.options = options
     this.start()
   }
   async start() {
     if (!this.isRunning) return
 
-    let ws: WebSocket
-    if (this.headers) {
+    let ws: Socket
+    const Custom = WebSocketClient.sockets[this.address.slice(0, this.address.indexOf(':'))]
+    if (Custom) {
+      ws = new Custom(this.address, (await this.headers?.()) ?? {}, this.options)
+    } else if (this.headers) {
       if (WebSocketClient.isBun) {
         // @ts-ignore
         ws = new WebSocket(this.address, this.headers ? { headers: await this.headers() } : undefined)
@@ -116,6 +137,7 @@ export class WebSocketClient {
       ws = new WebSocket(this.address)
     }
     ws.onopen = async () => {
+      if (!this.isRunning) return ws.close()
       this.isConnected = true
       this.attempts = 0
       this.ws = ws
@@ -132,7 +154,7 @@ export class WebSocketClient {
       this.onclose?.()
       this.reconnect()
     }
-    ws.onmessage = (message: MessageEvent<any>) => {
+    ws.onmessage = message => {
       if (typeof message.data !== 'string') return
       let value: any
       try {

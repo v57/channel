@@ -20,7 +20,7 @@ export interface ListenOptions<State> {
   onDisconnect?: (connection: BodyContext<State>) => void
 }
 
-class Subscriptions {
+export class Subscriptions {
   id = 0
   subscribed = new Map<string, Map<number, EventBody>>()
   addTopic(topic: string, event: EventBody): () => boolean {

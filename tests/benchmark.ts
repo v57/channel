@@ -2,6 +2,10 @@ import { Channel, type Sender } from '../channel'
 import '../client'
 import '../server'
 
+// `bun tests/benchmark.ts quic` runs the same tests over the QUIC transport
+const quic = process.argv.includes('quic') ? await import('../quic') : undefined
+const tls = { key: await Bun.file(`${import.meta.dir}/quic/key.pem`).text(), cert: await Bun.file(`${import.meta.dir}/quic/cert.pem`).text() }
+
 interface TestingInfo {
   isCancelled: boolean
 }
@@ -10,8 +14,9 @@ async function startTest(name: string, test: (client: Sender, info: TestingInfo)
   const start = Bun.nanoseconds()
   let count = 0
   let info: TestingInfo = { isCancelled: false }
-  const server = new Channel().post('hello', () => ++count).listen(2048)
-  const client = new Channel().connect(2048)
+  const channel = new Channel().post('hello', () => ++count)
+  const server = quic ? await channel.listenQuic('127.0.0.1:2048', tls) : channel.listen(2048)
+  const client = new Channel().connect(quic ? 'quic://127.0.0.1:2048' : 2048, { quic: { ca: tls.cert } })
   setTimeout(() => {
     info.isCancelled = true
   }, 500)
@@ -20,7 +25,7 @@ async function startTest(name: string, test: (client: Sender, info: TestingInfo)
   const formatted = new Intl.NumberFormat('en-US').format(ops)
   console.log(formatted.padStart(9, ' '), 'ops', name)
   client.stop()
-  server.stop()
+  await server.stop()
 }
 async function run(client: Sender, info: TestingInfo, ops: number = 100_000) {
   for (let i = 0; i < ops; i += 1) {
