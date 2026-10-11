@@ -89,6 +89,8 @@ export class WebSocketClient {
   isConnected: boolean = false
   headers?: () => Record<string, string> | Promise<Record<string, string>>
   isRunning = true
+  /** Failed connection attempts since the last open, drives the reconnect backoff */
+  attempts = 0
   constructor(address: string, headers?: () => Record<string, string> | Promise<Record<string, string>>) {
     this.address = address
     this.headers = headers
@@ -115,6 +117,7 @@ export class WebSocketClient {
     }
     ws.onopen = async () => {
       this.isConnected = true
+      this.attempts = 0
       this.ws = ws
       await this.onopen?.()
       ws.send(JSON.stringify(this.pending.map(a => a)))
@@ -127,7 +130,7 @@ export class WebSocketClient {
       this.isConnected = false
       this.ws = undefined
       this.onclose?.()
-      setTimeout(() => this.start(), 100)
+      this.reconnect()
     }
     ws.onmessage = (message: MessageEvent<any>) => {
       if (typeof message.data !== 'string') return
@@ -141,6 +144,12 @@ export class WebSocketClient {
       }
       this.onmessage?.(value)
     }
+  }
+  /** Retries after 100 ms, doubling up to 5 s while the server stays down, each delay randomized to 50-100% */
+  reconnect() {
+    if (!this.isRunning) return
+    const delay = Math.min(5000, 100 * 2 ** this.attempts++)
+    setTimeout(() => this.start(), delay * (0.5 + Math.random() / 2))
   }
   stop() {
     this.isRunning = false
