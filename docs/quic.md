@@ -63,6 +63,23 @@ For implementations in other languages. Everything not listed here works exactly
 - **Reconnect.** Same as WebSocket: the client reconnects with the same backoff (see [client.md](client.md)) and
   replays its unanswered requests.
 
+## Measurements
+
+`bun tests/benchmark.ts` and `bun tests/benchmark.ts quic`: one client sending `hello` requests to one server over
+localhost, Bun 1.4.2, Apple Silicon. Preliminary (2026-10-11): the machine was under heavy load from other work
+(load average 30-60), so only the ratio means much.
+
+| Concurrent requests | WebSocket | QUIC |
+| ---: | ---: | ---: |
+| 1 | 9.0k-9.2k req/s | 8.5k-8.8k req/s |
+| 100 | 85k | 82k |
+| 1,000 | 666k-672k | 472k-476k |
+| 10,000 | 707k-843k | 585k-605k |
+
+At low concurrency both are limited by the client, not the transport. Under load QUIC reaches about 70-85% of
+WebSocket throughput (userspace crypto and congestion control). Not measured yet: topic fan-out with many subscribers,
+CPU per request, and a network switch (connection migration).
+
 ## Differences from the WebSocket server
 
 - Topic fan-out runs in JavaScript (a loop over the subscribed connections). The WebSocket server uses Bun's native
