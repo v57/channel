@@ -156,6 +156,14 @@ test('state/unauthorized', async () => {
   const response = client.send('auth/name')
   expect(response).rejects.toBe('unauthorized')
 })
+test('reconnect/replays unanswered requests', async () => {
+  const client = new Channel().connect(2049)
+  await client.send('hello')
+  const response = client.send('slow')
+  client.ws.ws?.close()
+  expect(await response).toBe('slow')
+  client.stop()
+})
 test('stopping', async () => {
   client.ws.throttle()
   client.send('disconnect')

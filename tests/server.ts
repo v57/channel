@@ -22,6 +22,11 @@ export const server = new Channel<State>()
   .post('echo', ({ body }) => body)
   // Returns undefined
   .post('empty', () => {})
+  // Answers after a delay, for reconnect tests
+  .post('slow', async () => {
+    await sleep(0.05)
+    return 'slow'
+  })
   // Disconnects the client
   .post('disconnect', ({ sender }) => {
     sender.stop()

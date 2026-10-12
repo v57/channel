@@ -93,3 +93,45 @@ test('WebSocketClient closes the socket on an unparseable message instead of thr
     ;(globalThis as any).WebSocket = originalWebSocket
   }
 })
+
+test('WebSocketClient backs off exponentially with jitter while the server is down', async () => {
+  const originalWebSocket = globalThis.WebSocket
+  const originalSetTimeout = globalThis.setTimeout
+  const originalRandom = Math.random
+  FakeWebSocket.instances.splice(0)
+  ;(globalThis as any).WebSocket = FakeWebSocket as any
+  const delays: number[] = []
+  const retries: (() => void)[] = []
+  ;(globalThis as any).setTimeout = (fn: () => void, delay: number) => {
+    delays.push(delay)
+    retries.push(fn)
+    return 0
+  }
+  Math.random = () => 1
+
+  try {
+    const client = new WebSocketClient('ws://localhost:9999')
+    for (let i = 0; i < 8; i += 1) {
+      const ws = FakeWebSocket.instances.at(-1)!
+      ws.close()
+      retries.shift()!()
+    }
+    expect(delays).toEqual([100, 200, 400, 800, 1600, 3200, 5000, 5000])
+
+    // A successful open resets the backoff
+    const ws = FakeWebSocket.instances.at(-1)!
+    await ws.onopen?.()
+    ws.close()
+    Math.random = () => 0
+    FakeWebSocket.instances.at(-1)!.close()
+    expect(delays.slice(8)).toEqual([100, 100])
+
+    // No retries after stop
+    client.stop()
+    expect(delays.length).toBe(10)
+  } finally {
+    ;(globalThis as any).WebSocket = originalWebSocket
+    ;(globalThis as any).setTimeout = originalSetTimeout
+    Math.random = originalRandom
+  }
+})
