@@ -65,6 +65,8 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
         let headers: Record<string, string | undefined> = Object.create(null)
         new URL(req.url).searchParams.forEach((value, key) => (headers[key] = value))
         req.headers.forEach((value, key) => (headers[key] = value))
+        const remote = server.requestIP(req)
+        headers['x-hub-remote-ip'] = remote?.address
         if (server.upgrade(req, { data: { state: await makeState(headers) } })) return
       } else {
         if (server.upgrade(req, { data: { state: {} } })) return
