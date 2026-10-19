@@ -56,9 +56,18 @@ Channel.prototype.connect = function (address: string | number, options: Options
     publish: { publish(event: SubscriptionEvent): void }
   }> = []
   let removedPublishers = false
+  // Events from `channel.publish`, for topics the server subscribed to
+  const transport = {
+    publish(event: SubscriptionEvent) {
+      if (topics.has(event.topic)) ws.notify(event)
+    },
+  }
+  ch.transports.push(transport)
   const cleanupPublishers = () => {
     if (removedPublishers) return
     removedPublishers = true
+    const index = ch.transports.indexOf(transport)
+    if (index >= 0) ch.transports.splice(index, 1)
     for (const item of publishers) {
       const index = item.subscription.publishers.indexOf(item.publish)
       if (index >= 0) item.subscription.publishers.splice(index, 1)
@@ -75,7 +84,7 @@ Channel.prototype.connect = function (address: string | number, options: Options
     const publisher = {
       publish(event: SubscriptionEvent) {
         if (!topics.has(event.topic)) return
-        ws.send(event)
+        ws.notify(event)
       },
     }
     subscription.publishers.push(publisher)

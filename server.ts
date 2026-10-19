@@ -133,10 +133,13 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
     },
   }
   this.eventsApi?.forEach(a => a.publishers.push(publisher))
+  this.transports.push(publisher)
   let removedPublisher = false
   const cleanupPublisher = () => {
     if (removedPublisher) return
     removedPublisher = true
+    const index = channel.transports.indexOf(publisher)
+    if (index >= 0) channel.transports.splice(index, 1)
     this.eventsApi?.forEach(subscription => {
       const index = subscription.publishers.indexOf(publisher)
       if (index >= 0) subscription.publishers.splice(index, 1)

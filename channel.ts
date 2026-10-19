@@ -11,6 +11,18 @@ export type Stream<State> = (
   body: Body<State>,
 ) => AsyncIterator<any, void, any> | Promise<AsyncIterator<any, void, any>>
 export type EventBody = (body: any) => void
+/** What a `sub` handler returns: the topic to join, and the snapshot. Without a topic the subscription is one-shot. */
+export interface SubResult {
+  topic?: string
+  body?: any
+}
+export type SubHandler<State> = (body: Body<State>) => SubResult | void | Promise<SubResult | void>
+/** The second argument of `Subscription.topic()` and `body()` callbacks */
+export interface SubscriptionContext<State = any> {
+  state: State
+  sender: Sender
+  context: any
+}
 type Api<State> = {
   [key: string]: Api<State> | ((body: Body<State>) => any)
 }
@@ -25,7 +37,14 @@ export interface Controller<State> {
 
 export class Channel<State> {
   private id = 0
-  publish: (topic: string, body: any) => void = () => {}
+  /** Delivers published events to the connections subscribed to their topic, one per `listen()` */
+  transports: Publisher[] = []
+  /**
+   * Every `publish` goes through here. Replace it to fan events out across processes (Redis, NATS, ...), and call
+   * `deliver` with the events that arrive.
+   */
+  publisher: (event: SubscriptionEvent) => void = event => this.deliver(event)
+  subApi = new ObjectMap<string, SubHandler<State>>()
   requests = new Map<number, PendingRequest>()
   postApi = new ObjectMap<string, Function<State>>()
   otherPostApi: { path: (path: string) => boolean; request: Function<State> }[] = []
@@ -49,6 +68,19 @@ export class Channel<State> {
   streamOther(path: (path: string) => boolean, request: Stream<State>) {
     this.otherStreamApi.push({ path, request })
     return this
+  }
+  /** Subscriptions whose handler decides the topic (or none, for one-shot) from the body and the connection */
+  sub(path: string, handler: SubHandler<State>) {
+    this.subApi.set(path, handler)
+    return this
+  }
+  /** Sends `body` to every connection subscribed to `topic`, across every `listen()`. `undefined` isn't sent. */
+  publish(topic: string, body: any) {
+    if (body === undefined) return
+    this.publisher({ topic, body })
+  }
+  deliver(event: SubscriptionEvent) {
+    for (const transport of this.transports) transport.publish(event)
   }
   onDisconnect(action: (state: State, sender: Sender) => void) {
     this._onDisconnect = action
@@ -218,22 +250,16 @@ export class Channel<State> {
       } catch {}
     } else if (some.sub) {
       const id: number | undefined = some.id
-      const subscription = this.eventsApi?.get(some.sub)
       try {
-        if (!subscription) throw subscriptionNotFound
-        let topic = subscription._topic(some.body)
-        topic = subscription.prefix + '/' + topic
-        const body = subscription._body(some.body)
-        if (body?.then && body.catch) {
-          body
-            .then((a: any) => {
-              controller.subscribe(topic)
-              controller.response({ id, topic, body: a })
+        const result = this.subscription(some.sub, some.body, some.context ?? {}, controller)
+        if (result?.then) {
+          result
+            .then((a: SubResult | void) => this.subscribed(id, a, controller))
+            .catch((e: any) => {
+              if (id !== undefined) controller.response(errorResponse(id, e))
             })
-            .catch((e: any) => controller.response(errorResponse(id!, e)))
         } else {
-          controller.subscribe(topic)
-          controller.response({ id, topic, body })
+          this.subscribed(id, result, controller)
         }
       } catch (e) {
         if (id !== undefined) controller.response(errorResponse(id, e))
@@ -242,11 +268,16 @@ export class Channel<State> {
       controller.unsubscribe(some.unsub)
     } else if (some.topic) {
       if (some.id !== undefined) {
+        // A subscription response. Active subscriptions keep their request, so the snapshots of their
+        // resubscriptions after a reconnect reach them too.
         const request = this.requests.get(some.id)
-        this.requests.delete(some.id)
-        if (request) request.response(some)
+        if (request) {
+          if (!('sub' in request.request)) this.requests.delete(some.id)
+          request.response(some)
+        }
+      } else if ('body' in some) {
+        controller.event(some.topic, some.body)
       }
-      if (some.body) controller.event(some.topic, some.body)
     } else if (some.id !== undefined) {
       const request = this.requests.get(some.id)
       if (!request) return
@@ -255,6 +286,27 @@ export class Channel<State> {
       }
       if (request) request.response(some)
     }
+  }
+  private subscription(path: string, body: any, context: any, controller: Controller<State>): any {
+    const handler = this.subApi.get(path)
+    const { sender, state } = controller
+    if (handler) return handler({ body, context, sender, state, path })
+    const subscription = this.eventsApi?.get(path)
+    if (!subscription) throw subscriptionNotFound
+    const ctx: SubscriptionContext<State> = { state, sender, context }
+    const topic = subscription.prefix + '/' + subscription._topic(body, ctx)
+    const snapshot = subscription._body(body, ctx)
+    if (snapshot?.then) return snapshot.then((a: any) => ({ topic, body: a }))
+    return { topic, body: snapshot }
+  }
+  private subscribed(id: number | undefined, result: SubResult | void, controller: Controller<State>) {
+    const topic = result?.topic
+    if (topic) controller.subscribe(topic)
+    if (id === undefined) return
+    const response: Response = { id }
+    if (topic) response.topic = topic
+    if (result && result.body !== undefined) response.body = result.body
+    controller.response(response)
   }
   private async streamRequest(
     id: number,
@@ -304,6 +356,7 @@ export class Channel<State> {
       this.events(channel.eventsApi, prefix)
     }
     channel.postApi.forEach((value, key) => this.post(p + key, value))
+    channel.subApi.forEach((value, key) => this.sub(p + key, value))
     channel.streamApi.forEach((value, key) => this.stream(p + key, value))
     const scoped = (match: (path: string) => boolean) =>
       p.length ? (path: string) => path.startsWith(p) && match(path.slice(p.length)) : match
@@ -412,7 +465,7 @@ export function errorResponse(id: number, e: any): Response {
   return response
 }
 
-interface Publisher {
+export interface Publisher {
   publish(event: SubscriptionEvent): void
 }
 
@@ -435,12 +488,13 @@ export class Subscription {
   }
   publishers: Publisher[] = []
   prefix: string = ''
-  _topic: (request: any) => string = request => (request === undefined ? '' : `${request}`)
-  _body: (request: any) => any | Promise<any> | undefined = () => {}
-  topic(make: (request: any) => string) {
+  _topic: (request: any, ctx?: SubscriptionContext) => string = request => (request === undefined ? '' : `${request}`)
+  _body: (request: any, ctx?: SubscriptionContext) => any | Promise<any> | undefined = () => {}
+  /** `ctx` is the subscribing connection, missing when called from `send()` */
+  topic(make: (request: any, ctx?: SubscriptionContext) => string) {
     this._topic = make
   }
-  body(make: (body: any) => any) {
+  body(make: (body: any, ctx?: SubscriptionContext) => any) {
     this._body = make
   }
   send(request: any, body?: any) {
@@ -453,7 +507,7 @@ export class Subscription {
     }
   }
   publish(topic: string, body?: any) {
-    if (!body) return
+    if (body === undefined) return
     const event: SubscriptionEvent = { topic: this.prefix.length ? this.prefix + '/' + topic : topic, body }
     this.publishers.forEach(a => a.publish(event))
   }
@@ -629,29 +683,59 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
     },
     async subscribe(path: string, body: any, event: (body: any) => void, options?: SendOptions): Promise<Cancellable> {
       return new Promise((success, failure) => {
+        let id: number | undefined
+        let rid: number | undefined
+        let ended = false
+        let resolved = false
+        let topic: string | undefined
+        let removeTopic: (() => boolean) | undefined
+        // Stops waiting for responses and removes the request from the replay set
+        const end = () => {
+          ended = true
+          if (rid !== undefined) ch.cancel(rid)
+          if (id !== undefined) connection.sent(id)
+          rid = id = undefined
+        }
+        const leave = () => {
+          if (removeTopic?.() && topic) connection.notify({ unsub: topic })
+          removeTopic = topic = undefined
+        }
+        const subscription: Cancellable = {
+          cancel() {
+            end()
+            leave()
+          },
+        }
         const request = ch.makeSubscription(
           path,
           body,
           options?.context,
           response => {
             if (response.error) {
-              failure(ChannelError.from(response))
-            } else {
-              const topic = response.topic!
-              const cancel = connection.addTopic(topic, event)
-              success({
-                cancel(): void {
-                  let cancalled = cancel()
-                  if (cancalled) {
-                    connection.notify({ unsub: topic })
-                  }
-                },
-              })
+              // A refused resubscription ends the subscription too
+              subscription.cancel()
+              if (!resolved) failure(ChannelError.from(response))
+              resolved = true
+              return
             }
+            if (!response.topic) {
+              end() // one-shot
+              leave()
+            } else if (response.topic !== topic) {
+              leave()
+              topic = response.topic
+              removeTopic = connection.addTopic(topic, event)
+            }
+            // The snapshot, again after every resubscription
+            if ('body' in response) event(response.body)
+            if (!resolved) success(subscription)
+            resolved = true
           },
           sender,
         )
-        connection.send(request)
+        rid = request.id
+        id = connection.send(request)
+        if (ended) connection.sent(id)
       })
     },
     stop() {

@@ -15,8 +15,11 @@ export const port = Number(process.env.CHANNEL_TEST_PORT ?? 2049)
 export let stats = {
   mirrorEvents: 0,
   streamCancel: 0,
+  /** Calls of the v2 subscription handlers, to check what reconnects resubscribe */
+  rooms: 0,
+  once: 0,
 }
-export const server = new Channel<State>()
+export const channel = new Channel<State>()
   // Simple api that will return 'world' string
   .post('hello', () => 'world')
   // Returns whatever client have on it's 'hello' api
@@ -92,6 +95,26 @@ export const server = new Channel<State>()
   .post('v2/error/code', () => {
     throw { message: 'slow down', code: 'rate_limited', info: { retryAfter: 1 } }
   })
+  // Subscriptions with dynamic topics: { room } joins 'room/<room>', with 'joined' as the snapshot
+  .sub('v2/room', ({ body }) => {
+    stats.rooms += 1
+    return { topic: 'room/' + body.room, body: 'joined' }
+  })
+  // { room, body } sends body to everyone in the room
+  .post('v2/publish', ({ body }) => {
+    channel.publish('room/' + body.room, body.body)
+    return null
+  })
+  // One-shot: a snapshot without a topic
+  .sub('v2/once', () => {
+    stats.once += 1
+    return { body: 'once' }
+  })
+  // Refused until 'auth' sets a name
+  .sub('v2/private', ({ state }) => {
+    if (!state.name) throw { message: 'unauthorized', code: 401 }
+    return { topic: 'private/' + state.name, body: state.name }
+  })
   // Sets the events
   .events(events)
   // Adds api from another Channel (State type should be the same)
@@ -99,9 +122,10 @@ export const server = new Channel<State>()
     new Channel<State>().api({ hello: () => 'world', *stream() {} }).events({ never: new Subscription() }),
     'merged',
   )
-  // Listens to 127.0.0.1:2049
-  // can be replaced with 'ip:port' string
-  .listen(port)
+
+// Listens to 127.0.0.1:2049
+// can be replaced with 'ip:port' string
+export const server = channel.listen(port)
 
 async function sleep(seconds: number = 0.001) {
   await new Promise(resolve => {

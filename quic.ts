@@ -309,12 +309,15 @@ Channel.prototype.listenQuic = async function <State>(
     },
   }
   this.eventsApi?.forEach(a => a.publishers.push(publisher))
+  this.transports.push(publisher)
   let stopped = false
   return {
     port: endpoint.address!.port,
     async stop() {
       if (stopped) return
       stopped = true
+      const index = channel.transports.indexOf(publisher)
+      if (index >= 0) channel.transports.splice(index, 1)
       channel.eventsApi?.forEach(subscription => {
         const index = subscription.publishers.indexOf(publisher)
         if (index >= 0) subscription.publishers.splice(index, 1)
