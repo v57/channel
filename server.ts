@@ -15,7 +15,19 @@ export interface BodyContext<State> {
 }
 
 export interface ListenOptions<State> {
+  /**
+   * Makes the connection state from the upgrade request's headers and query parameters, plus `x-hub-remote-ip`.
+   * Throwing (or rejecting) refuses the connection with 401.
+   */
   state?: (headers: Record<string, string | undefined>) => Promise<State> | State
+  /** Upgrades only requests whose URL path matches, others get 404. Any path by default. */
+  path?: string | ((path: string) => boolean)
+  /** Largest incoming message in bytes, bigger ones close the connection. 16 MiB by default. */
+  maxPayload?: number
+  /** Seconds without messages before Bun closes the connection. 120 by default. */
+  idleTimeout?: number
+  /** Bun's per-message deflate. Off by default. */
+  perMessageDeflate?: boolean
   onConnect?: (connection: BodyContext<State>) => void
   onDisconnect?: (connection: BodyContext<State>) => void
 }
@@ -56,10 +68,16 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
   } else {
     port = address
   }
+  let matches = options?.path
+  if (typeof matches === 'string') {
+    const path = matches.startsWith('/') ? matches : '/' + matches
+    matches = a => a === path
+  }
   const ws = Bun.serve({
     port,
     hostname,
     async fetch(req, server) {
+      if (matches && !matches(new URL(req.url).pathname)) return new Response('not found', { status: 404 })
       const makeState = options?.state
       if (makeState) {
         let headers: Record<string, string | undefined> = Object.create(null)
@@ -67,13 +85,22 @@ Channel.prototype.listen = function <State>(address: number | string, options?: 
         req.headers.forEach((value, key) => (headers[key] = value))
         const remote = server.requestIP(req)
         headers['x-hub-remote-ip'] = remote?.address
-        if (server.upgrade(req, { data: { state: await makeState(headers) } })) return
+        let state: State
+        try {
+          state = await makeState(headers)
+        } catch {
+          return new Response('unauthorized', { status: 401 })
+        }
+        if (server.upgrade(req, { data: { state } })) return
       } else {
         if (server.upgrade(req, { data: { state: {} } })) return
       }
       return new Response()
     },
     websocket: {
+      maxPayloadLength: options?.maxPayload ?? 16 * 1024 * 1024,
+      idleTimeout: options?.idleTimeout ?? 120,
+      perMessageDeflate: options?.perMessageDeflate ?? false,
       open(ws: ServerWebSocket<BodyContext<State>>) {
         ws.data.subscriptions = new Subscriptions()
         ws.data.sender = makeSender(channel, {
