@@ -15,7 +15,7 @@ Spend your budget on scaling DB or something else while this thing is delivering
 1. No dependencies
 2. Very simple logic
 3. Channel by design doesn't need much code.
-- The core is about 690 lines, the WebSocket client 245 and the server 145 (measured with scc, October 2026)
+- The core is about 900 lines, the WebSocket client 350 and the server 170 (measured with scc, October 2026, after wire v2)
 - Socket.IO's client has 2595 lines of code, and its hello world server pulls in **44708** lines with its dependencies
 4. WebSocket server is running on C by Bun
 5. When client sends a lot of requests, they start packing into a single request, highly reducing load on its websocket part

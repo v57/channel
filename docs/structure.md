@@ -6,6 +6,8 @@ AnyEvent { // all fields are optional, Channel will receive either AnyEvent or A
   path?: string
   body?: any
   error?: string
+  code?: string | number // with error
+  info?: any // with error
   cancel?: number
   sub?: string
   unsub?: string
@@ -29,7 +31,9 @@ SuccessResponse {
 }
 ErrorResponse {
   id: number // same as request id
-  error: string // response error
+  error: string // response error, a non-empty message
+  code?: string | number // library codes: not_found, cancelled, rate_limited. Or the application's own.
+  info?: any // any JSON
 }
 CancelRequest { // doesn't get a response
   cancel: number // request id to cancel
@@ -46,17 +50,19 @@ Request {
 SuccessResponse {
   id: number // same as request id
   error: nil
-  topic: string // event topic on which you will receive events
-  body?: any // response body
+  topic?: string // event topic on which you will receive events. Without it the subscription is one-shot.
+  body?: any // snapshot, delivered as the first event when the key is present (also 0, false, "" and null)
 }
 ErrorResponse {
   id: number // same as request id
   error: string // response error
+  code?: string | number
+  info?: any
 }
 Event {
   id: nil
   topic: string // event topic
-  body: any // event body
+  body: any // event body, delivered when the key is present (also 0, false, "" and null)
 }
 Unsubscribe {
   unsub: string // event topic
@@ -73,6 +79,8 @@ Event {
   id: number
   body?: any // event body
   error?: string // event error, should close the stream without checking for done == true
+  code?: string | number // with error
+  info?: any // with error
   done?: boolean // when true, means it's the last event from this stream
 }
 CancelRequest { // cancels stream, doesn't get a response
@@ -100,7 +108,7 @@ receiveOne(some: any) {
         const body = callApi(some.path, some.body)
         send({ id, body })
       } catch(error) {
-        send({ id, error })
+        send({ id, error, code, info }) // see v2.md for the conversion of thrown values
       }
     } else {
       callApi(some.path, some.body)
@@ -121,7 +129,7 @@ receiveOne(some: any) {
     const id = some.id
     if (!id) return
     try {
-      const { topic, body } = subscribe(some.sub, some.body)
+      const { topic, body } = subscribe(some.sub, some.body) // no topic: one-shot, nothing to join
       send({ id, topic, body })
     } catch {
       send({ id, error })
@@ -130,10 +138,10 @@ receiveOne(some: any) {
     unsubscibeFromTopic(some.unsub)
   } else if (some.topic) {
     if (some.id) {
-      const request = getRequest(some.id)
-      request.complete()
+      const request = getRequest(some.id) // the subscription, which delivers the snapshot to its own handler
+      request.receive(some)
     }
-    if (some.body) receivedEvent(some.topic, some.body)
+    else if ('body' in some) receivedEvent(some.topic, some.body)
   } else if (some.id !== undefined) {
     const request = getRequest(some.id)
     request.receive(some)
