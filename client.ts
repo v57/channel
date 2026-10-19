@@ -1,5 +1,5 @@
 import { Channel, ObjectMap, makeSender } from './channel'
-import type { EventBody, Sender, SubscriptionEvent, Subscription } from './channel'
+import type { Cancellable, EventBody, Sender, SubscriptionEvent, Subscription } from './channel'
 export { Channel, ChannelError, ObjectMap, type Sender } from './channel'
 
 declare module './channel' {
@@ -14,7 +14,14 @@ export interface Options {
   onConnect?(sender: Sender): Promise<void>
   /** Default timeout in seconds for every post and subscription. None by default. */
   requestTimeout?: number
+  /**
+   * Seconds between pings, 15 by default, 0 disables them. Without a pong within 10 s the client reconnects.
+   * Bun only: browsers can't send pings, the server's pings keep their connections open.
+   */
+  pingInterval?: number
 }
+
+export type ConnectionState = 'disconnected' | 'connecting' | 'connected'
 
 /** What the client needs from a socket. Other transports (`quic.ts`) register one for their address scheme. */
 export interface Socket {
@@ -26,8 +33,13 @@ export interface Socket {
   close(): void
 }
 
-interface ClientSender extends Sender {
+export interface ClientSender extends Sender {
   ws: WebSocketClient
+  readonly state: ConnectionState
+  /** Calls `observer` with the current state, then with every change */
+  onStateChange(observer: (state: ConnectionState) => void): Cancellable
+  /** Resets the reconnect backoff and, when waiting to retry, connects at once (on network changes, coming to the foreground) */
+  reconnectNow(): void
 }
 
 Channel.prototype.connect = function (address: string | number, options: Options = {}) {
@@ -95,7 +107,15 @@ Channel.prototype.connect = function (address: string | number, options: Options
     subscription.publishers.push(publisher)
     publishers.push({ subscription, publish: publisher })
   })
-  return { ...sender, ws }
+  return {
+    ...sender,
+    ws,
+    get state() {
+      return ws.state
+    },
+    onStateChange: observer => ws.onStateChange(observer),
+    reconnectNow: () => ws.reconnectNow(),
+  }
 }
 
 export class WebSocketClient {
@@ -123,6 +143,12 @@ export class WebSocketClient {
   isRunning = true
   /** Failed connection attempts since the last open, drives the reconnect backoff */
   attempts = 0
+  /** Seconds to wait for a pong */
+  static pongTimeout = 10
+  state: ConnectionState = 'connecting'
+  private observers = new Set<(state: ConnectionState) => void>()
+  private retry?: ReturnType<typeof setTimeout>
+  private stopPings?: () => void
   get requestTimeout() {
     return this.options.requestTimeout
   }
@@ -138,6 +164,7 @@ export class WebSocketClient {
   }
   async start() {
     if (!this.isRunning) return
+    this.setState('connecting')
 
     let ws: Socket
     const Custom = WebSocketClient.sockets[this.address.slice(0, this.address.indexOf(':'))]
@@ -163,6 +190,8 @@ export class WebSocketClient {
       this.isConnected = true
       this.attempts = 0
       this.ws = ws
+      this.startPings(ws)
+      this.setState('connected')
       await this.onopen?.()
       ws.send(JSON.stringify(this.pending.map(a => a)))
     }
@@ -175,6 +204,9 @@ export class WebSocketClient {
       const opened = this.ws === ws
       this.isConnected = false
       this.ws = undefined
+      this.stopPings?.()
+      this.stopPings = undefined
+      this.setState('disconnected')
       // Everything pending was written to this socket
       if (opened && this.noReplay.size) {
         for (const id of this.noReplay) {
@@ -204,11 +236,64 @@ export class WebSocketClient {
   reconnect() {
     if (!this.isRunning) return
     const delay = Math.min(5000, 100 * 2 ** this.attempts++)
-    setTimeout(() => this.start(), delay * (0.5 + Math.random() / 2))
+    this.retry = setTimeout(() => {
+      this.retry = undefined
+      this.start()
+    }, delay * (0.5 + Math.random() / 2))
+  }
+  reconnectNow() {
+    this.attempts = 0
+    if (this.retry === undefined || !this.isRunning) return
+    clearTimeout(this.retry)
+    this.retry = undefined
+    this.start()
+  }
+  onStateChange(observer: (state: ConnectionState) => void): Cancellable {
+    this.observers.add(observer)
+    observer(this.state)
+    return { cancel: () => this.observers.delete(observer) }
+  }
+  private setState(state: ConnectionState) {
+    if (this.state === state) return
+    this.state = state
+    for (const observer of [...this.observers]) {
+      try {
+        observer(state)
+      } catch {}
+    }
+  }
+  /** Pings in Bun, whose client WebSocket has `ping()` and a `pong` event. Browsers have neither. */
+  private startPings(ws: Socket) {
+    const interval = this.options.pingInterval ?? 15
+    const socket = ws as any
+    if (!interval || typeof socket.ping !== 'function' || typeof socket.addEventListener !== 'function') return
+    let waiting: ReturnType<typeof setTimeout> | undefined
+    socket.addEventListener('pong', () => {
+      clearTimeout(waiting)
+      waiting = undefined
+    })
+    const timer = setInterval(() => {
+      if (waiting !== undefined) return
+      try {
+        socket.ping()
+      } catch {}
+      waiting = setTimeout(() => {
+        // No pong: the connection is gone without a close, so don't wait for the closing handshake either
+        if (typeof socket.terminate === 'function') socket.terminate()
+        else ws.close()
+      }, WebSocketClient.pongTimeout * 1000)
+    }, interval * 1000)
+    this.stopPings = () => {
+      clearInterval(timer)
+      clearTimeout(waiting)
+    }
   }
   /** Stops reconnecting and fails every pending call with `disconnected` */
   stop() {
     this.isRunning = false
+    if (this.retry !== undefined) clearTimeout(this.retry)
+    this.retry = undefined
+    this.setState('disconnected')
     this.pending = new ObjectMap()
     this.noReplay.clear()
     this.ws?.close()

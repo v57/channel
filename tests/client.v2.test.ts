@@ -160,3 +160,176 @@ test('stop() while offline fails queued calls', async () => {
   expect((await failure(post)).code).toBe('disconnected')
   expect((await failure(sub)).code).toBe('disconnected')
 })
+
+test('9. async headers reach the server and are evaluated again on every reconnect', async () => {
+  let attempts = 0
+  const client = new Channel().connect(address, {
+    headers: async () => {
+      await sleep()
+      return { 'x-attempt': `${++attempts}` }
+    },
+  })
+  expect((await client.send('v2/headers'))['x-attempt']).toBe('1')
+  client.ws.ws?.close()
+  expect((await client.send('v2/headers'))['x-attempt']).toBe('2')
+  // and sync headers still work
+  const sync = new Channel().connect(address, { headers: () => ({ 'x-sync': 'yes' }) })
+  expect((await sync.send('v2/headers'))['x-sync']).toBe('yes')
+  client.stop()
+  sync.stop()
+})
+
+test('connection state observers see connecting, connected and disconnected', async () => {
+  const client = new Channel().connect(address)
+  const first: string[] = []
+  const second: string[] = []
+  const a = client.onStateChange(state => first.push(state))
+  client.onStateChange(state => second.push(state))
+  expect(client.state).toBe('connecting')
+  await client.send('hello')
+  expect(client.state).toBe('connected')
+  a.cancel()
+  client.ws.ws?.close()
+  await client.send('hello')
+  client.stop()
+  expect(client.state).toBe('disconnected')
+  expect(first).toEqual(['connecting', 'connected'])
+  expect(second).toEqual(['connecting', 'connected', 'disconnected', 'connecting', 'connected', 'disconnected'])
+})
+
+test('reconnectNow skips the backoff wait', async () => {
+  // Nothing listens there yet, so the client keeps retrying with a growing backoff
+  const probe = Bun.serve({ port: 0, fetch: () => new Response() })
+  const free = probe.port
+  probe.stop(true)
+  const client = new Channel().connect(`ws://127.0.0.1:${free}`)
+  // Waiting 0.8-1.6 s after the 5th failed attempt
+  await until(() => client.ws.attempts >= 5 && client.state === 'disconnected', 4)
+  const server = new Channel().post('hello', () => 'world').listen(free)
+  const started = Date.now()
+  client.reconnectNow()
+  expect(client.ws.attempts).toBe(0)
+  expect(await client.send('hello')).toBe('world')
+  expect(Date.now() - started).toBeLessThan(500)
+  // A no-op while connected
+  client.reconnectNow()
+  expect(client.state).toBe('connected')
+  client.stop()
+  server.stop(true)
+}, 10000)
+
+test('the client pings in Bun', async () => {
+  let pings = 0
+  const server = Bun.serve({
+    port: 0,
+    fetch: (req, server) => (server.upgrade(req) ? undefined : new Response()),
+    websocket: {
+      message() {},
+      ping() {
+        pings += 1
+      },
+    },
+  })
+  const client = new Channel().connect(`ws://127.0.0.1:${server.port}`, { pingInterval: 0.02 })
+  await until(() => pings >= 3)
+  expect(client.state).toBe('connected')
+  // pingInterval 0 disables them
+  let quietPings = 0
+  const quiet = Bun.serve({
+    port: 0,
+    fetch: (req, server) => (server.upgrade(req) ? undefined : new Response()),
+    websocket: {
+      message() {},
+      ping() {
+        quietPings += 1
+      },
+    },
+  })
+  const silent = new Channel().connect(`ws://127.0.0.1:${quiet.port}`, { pingInterval: 0 })
+  await until(() => silent.state === 'connected')
+  await sleep(0.05)
+  expect(quietPings).toBe(0)
+  client.stop()
+  silent.stop()
+  server.stop(true)
+  quiet.stop(true)
+})
+
+test('without a pong the client drops the connection and reconnects, replaying pending calls', async () => {
+  const { WebSocketClient } = await import('../client')
+  class Silent extends EventTarget {
+    static sockets: Silent[] = []
+    onopen: ((event: any) => void) | null = null
+    onclose: ((event: any) => void) | null = null
+    onerror: ((event: any) => void) | null = null
+    onmessage: ((event: any) => void) | null = null
+    sent: string[] = []
+    pings = 0
+    terminated = false
+    constructor() {
+      super()
+      Silent.sockets.push(this)
+      setTimeout(() => this.onopen?.({}))
+    }
+    send(data: string) {
+      this.sent.push(data)
+    }
+    ping() {
+      this.pings += 1
+    }
+    terminate() {
+      this.terminated = true
+      this.onclose?.({})
+    }
+    close() {
+      this.onclose?.({})
+    }
+  }
+  WebSocketClient.sockets.silent = Silent as any
+  const pongTimeout = WebSocketClient.pongTimeout
+  WebSocketClient.pongTimeout = 0.03
+  try {
+    const client = new Channel().connect('silent://test', { pingInterval: 0.01 })
+    const call = client.send('hello')
+    call.catch(() => {})
+    await until(() => Silent.sockets.length === 2)
+    const [first, second] = Silent.sockets
+    expect(first.pings).toBe(1)
+    expect(first.terminated).toBe(true)
+    await until(() => second.sent.length > 0)
+    expect(JSON.parse(second.sent[0])).toEqual([{ id: expect.any(Number), path: 'hello' }])
+    client.stop()
+  } finally {
+    WebSocketClient.pongTimeout = pongTimeout
+    delete WebSocketClient.sockets.silent
+  }
+})
+
+test('invalid JSON closes the connection, replayable calls survive the reconnect', async () => {
+  let connections = 0
+  const server = Bun.serve({
+    port: 0,
+    fetch: (req, server) => (server.upgrade(req) ? undefined : new Response()),
+    websocket: {
+      open() {
+        connections += 1
+      },
+      message(ws: any, message: any) {
+        const requests = [JSON.parse(`${message}`)].flat()
+        for (const request of requests) {
+          if (request.path !== 'hello') continue
+          // the first connection gets garbage instead of an answer
+          ws.send(connections === 1 ? '{not json' : JSON.stringify({ id: request.id, body: 'world' }))
+        }
+      },
+    },
+  })
+  const client = new Channel().connect(`ws://127.0.0.1:${server.port}`)
+  const dropped = client.send('hello', undefined, { replay: false })
+  const replayed = client.send('hello')
+  expect((await failure(dropped)).code).toBe('disconnected')
+  expect(await replayed).toBe('world')
+  expect(connections).toBe(2)
+  client.stop()
+  server.stop(true)
+})
