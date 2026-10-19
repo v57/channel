@@ -9,8 +9,11 @@ declare module './channel' {
 }
 
 export interface Options {
+  /** Evaluated before every connection attempt, can be async */
   headers?(): any
   onConnect?(sender: Sender): Promise<void>
+  /** Default timeout in seconds for every post and subscription. None by default. */
+  requestTimeout?: number
 }
 
 /** What the client needs from a socket. Other transports (`quic.ts`) register one for their address scheme. */
@@ -80,6 +83,8 @@ Channel.prototype.connect = function (address: string | number, options: Options
     ch.disconnect(state, sender, ws.isRunning)
   }
   ws.onmessage = message => ch.receive(message, controller)
+  ws.onfail = request => ch.fail(request.id, 'disconnected')
+  ws.onstop = () => ch.failAll(sender)
   this.eventsApi?.forEach(subscription => {
     const publisher = {
       publish(event: SubscriptionEvent) {
@@ -105,6 +110,11 @@ export class WebSocketClient {
   onclose?: () => void
   onmessage: ((message: any) => void) | undefined
   pending = new ObjectMap<number, any>()
+  /** Pending requests sent with `replay: false` */
+  noReplay = new Set<number>()
+  /** A pending `replay: false` request is dropped with the connection */
+  onfail?: (request: any) => void
+  onstop?: () => void
   private isWaiting = 0
   private isWaitingLength = 0
   queue: any[] = []
@@ -113,6 +123,9 @@ export class WebSocketClient {
   isRunning = true
   /** Failed connection attempts since the last open, drives the reconnect backoff */
   attempts = 0
+  get requestTimeout() {
+    return this.options.requestTimeout
+  }
   constructor(
     address: string,
     headers?: () => Record<string, string> | Promise<Record<string, string>>,
@@ -154,12 +167,23 @@ export class WebSocketClient {
       ws.send(JSON.stringify(this.pending.map(a => a)))
     }
     ws.onerror = c => {
+      // This address doesn't have a websocket server, or refused the connection (404 path, 401 state)
       // @ts-ignore
-      if (c?.message?.includes('101')) this.isRunning = false // This address doesn't have websocket server or not accepting incoming connections
+      if (c?.message?.includes('101')) this.stop()
     }
     ws.onclose = c => {
+      const opened = this.ws === ws
       this.isConnected = false
       this.ws = undefined
+      // Everything pending was written to this socket
+      if (opened && this.noReplay.size) {
+        for (const id of this.noReplay) {
+          const request = this.pending.get(id)
+          this.pending.delete(id)
+          if (request) this.onfail?.(request)
+        }
+        this.noReplay.clear()
+      }
       this.onclose?.()
       this.reconnect()
     }
@@ -182,14 +206,18 @@ export class WebSocketClient {
     const delay = Math.min(5000, 100 * 2 ** this.attempts++)
     setTimeout(() => this.start(), delay * (0.5 + Math.random() / 2))
   }
+  /** Stops reconnecting and fails every pending call with `disconnected` */
   stop() {
     this.isRunning = false
     this.pending = new ObjectMap()
+    this.noReplay.clear()
     this.ws?.close()
+    this.onstop?.()
   }
-  send(body: any): number {
+  send(body: any, replay?: boolean): number {
     const id = this.id++
     this.pending.set(id, body)
+    if (replay === false) this.noReplay.add(id)
     if (!this.ws) {
       return id
     }
@@ -238,6 +266,7 @@ export class WebSocketClient {
   }
   sent(id: number) {
     this.pending.delete(id)
+    if (this.noReplay.size) this.noReplay.delete(id)
   }
   throttle() {
     this.isWaiting = 3

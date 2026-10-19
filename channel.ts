@@ -198,6 +198,21 @@ export class Channel<State> {
   cancel(id: number) {
     this.requests.delete(id)
   }
+  /** Fails a pending request locally with a client-only code: `timeout` or `disconnected` */
+  fail(id: number, code: string) {
+    const request = this.requests.get(id)
+    if (!request) return
+    this.requests.delete(id)
+    request.response({ id, error: code, code })
+  }
+  /** Fails every pending request made through `sender` with `disconnected` */
+  failAll(sender: Sender) {
+    const ids: number[] = []
+    this.requests.forEach((request, id) => {
+      if (request.request.sender === sender) ids.push(Number(id))
+    })
+    for (const id of ids) this.fail(id, 'disconnected')
+  }
   receive(some: any, controller: Controller<State>) {
     if (Array.isArray(some)) {
       some.forEach(a => this.receiveOne(a, controller))
@@ -633,6 +648,13 @@ export interface Sender {
 
 export interface SendOptions {
   context?: any
+  /** Seconds to wait for the response of a post or a subscription, then fail with code `timeout` */
+  timeout?: number
+  /**
+   * `false`: a request already written when the connection drops fails with code `disconnected` instead of being
+   * sent again after the reconnect. Requests queued while offline are still sent once connected.
+   */
+  replay?: boolean
 }
 
 export interface Cancellable {
@@ -645,7 +667,10 @@ export interface CancellableRequest extends Cancellable {
 }
 
 interface ConnectionInterface<RequestId = number> {
-  send(body: any): RequestId
+  /** `replay: false` marks the request as not to be sent again after a reconnect */
+  send(body: any, replay?: boolean): RequestId
+  /** Default timeout in seconds for posts and subscriptions */
+  requestTimeout?: number
   sent(id: RequestId): void
   cancel(id: RequestId): boolean
   notify(body: any): void
@@ -663,6 +688,9 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
     streams: new ObjectMap<number, AsyncIterator<any, void, any>>(),
     requests: new ObjectMap<number, CancellableRequest>(),
     async send(path: string, body?: any, options?: SendOptions): Promise<any> {
+      if ((options?.timeout ?? connection.requestTimeout) !== undefined || options?.replay === false) {
+        return sender.request(path, body, options).response
+      }
       return new Promise((success, failure) => {
         let id: number | undefined
         const request = ch.makeRequest(
@@ -687,12 +715,16 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
     request(path: string, body?: any, options?: SendOptions): SendingRequest {
       let id: number | undefined
       let rid: number | undefined
+      let done = false
+      let timer: ReturnType<typeof setTimeout> | undefined
       const response = new Promise((success, failure) => {
         const request = ch.makeRequest(
           path,
           body,
           options?.context,
           response => {
+            done = true
+            if (timer !== undefined) clearTimeout(timer)
             if (response.error) {
               failure(ChannelError.from(response))
             } else {
@@ -707,24 +739,37 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           sender,
         )
         rid = request.id
-        id = connection.send(request)
+        id = connection.send(request, options?.replay)
       })
-      return {
+      const sending: SendingRequest = {
         response,
         cancel() {
+          if (timer !== undefined) clearTimeout(timer)
+          // First, so a `cancelled` reply from an in-process peer finds nothing to answer
+          if (rid !== undefined) ch.cancel(rid)
           if (id !== undefined) {
+            // Removed from the queue while offline, otherwise the server cancels it
             const cancelled = connection.cancel(id)
             if (!cancelled && rid !== undefined) {
               connection.notify({ cancel: rid })
             }
+            connection.sent(id)
           } else if (rid !== undefined) {
             connection.notify({ cancel: rid })
           }
-          if (rid !== undefined) ch.cancel(rid)
           id = undefined
           rid = undefined
         },
       }
+      const timeout = options?.timeout ?? connection.requestTimeout
+      if (timeout !== undefined && !done) {
+        timer = setTimeout(() => {
+          const pending = rid === undefined ? undefined : ch.requests.get(rid)
+          sending.cancel()
+          pending?.response({ id: pending.request.id, error: 'timeout', code: 'timeout' })
+        }, timeout * 1000)
+      }
+      return sending
     },
     values(path: string, body?: any, options?: SendOptions) {
       let id: number | undefined
@@ -733,14 +778,15 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
         path,
         body,
         options,
-        body => (id = connection.send(body)),
+        body => (id = connection.send(body, options?.replay)),
         rid => {
-          if (id !== undefined) {
-            if (!connection.cancel(id)) connection.send({ cancel: rid })
-          } else {
-            connection.send({ cancel: rid })
-          }
           ch.cancel(rid)
+          if (id !== undefined) {
+            if (!connection.cancel(id)) connection.notify({ cancel: rid })
+            connection.sent(id)
+          } else {
+            connection.notify({ cancel: rid })
+          }
           id = undefined
         },
         sender,
@@ -765,8 +811,10 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           if (removeTopic?.() && topic) connection.notify({ unsub: topic })
           removeTopic = topic = undefined
         }
+        let timer: ReturnType<typeof setTimeout> | undefined
         const subscription: Cancellable = {
           cancel() {
+            if (timer !== undefined) clearTimeout(timer)
             end()
             leave()
           },
@@ -776,6 +824,8 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           body,
           options?.context,
           response => {
+            if (timer !== undefined) clearTimeout(timer)
+            timer = undefined
             if (response.error) {
               // A refused resubscription ends the subscription too
               subscription.cancel()
@@ -799,8 +849,18 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           sender,
         )
         rid = request.id
-        id = connection.send(request)
+        id = connection.send(request, options?.replay)
         if (ended) connection.sent(id)
+        const timeout = options?.timeout ?? connection.requestTimeout
+        if (timeout !== undefined && !resolved) {
+          timer = setTimeout(() => {
+            if (resolved) return
+            resolved = true
+            if (id !== undefined && rid !== undefined && !connection.cancel(id)) connection.notify({ cancel: rid })
+            subscription.cancel()
+            failure(new ChannelError('timeout', 'timeout'))
+          }, timeout * 1000)
+        }
       })
     },
     stop() {

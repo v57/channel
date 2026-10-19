@@ -24,7 +24,11 @@ export let stats = {
   /** Calls of the v2 subscription handlers, to check what reconnects resubscribe */
   rooms: 0,
   once: 0,
+  /** Cancelled v2/never calls */
+  cancels: 0,
 }
+/** v2/drop calls */
+let drops = 0
 export const channel = new Channel<State>()
   // 2 calls per second per connection
   .use(rateLimit({ key: ctx => `${ctx.state.id}`, limit: 2, window: 1, paths: path => path === 'v2/rate' }))
@@ -103,6 +107,23 @@ export const channel = new Channel<State>()
   .post('v2/error/code', () => {
     throw { message: 'slow down', code: 'rate_limited', info: { retryAfter: 1 } }
   })
+  // Never answers, counts the cancellations
+  .post('v2/never', ({ task }) => {
+    task?.onCancel(() => (stats.cancels += 1))
+    return new Promise(() => {})
+  })
+  // Counts the call, then closes the connection without answering
+  .post('v2/drop', ({ sender }) => {
+    drops += 1
+    sender.stop()
+    return new Promise(() => {})
+  })
+  .post('v2/drops', () => drops)
+  .post('v2/drops/reset', () => {
+    drops = 0
+  })
+  // The headers this connection was opened with
+  .post('v2/headers', ({ state }) => state.headers)
   .post('v2/rate', () => 'ok')
   // Subscriptions with dynamic topics: { room } joins 'room/<room>', with 'joined' as the snapshot
   .sub('v2/room', ({ body }) => {
