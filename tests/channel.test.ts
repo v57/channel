@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { Channel, Subscription } from '../channel'
 import '../client'
-import { stats, server, events, port } from './server'
+import { stats, events, port } from './server'
 
 const clientEvents = {
   names: new Subscription(),
@@ -166,7 +166,9 @@ test('reconnect/replays unanswered requests', async () => {
 })
 test('stopping', async () => {
   client.ws.throttle()
-  client.send('disconnect')
+  // Replayed after every reconnect, so it fails with disconnected once the client stops
+  client.send('disconnect').catch(() => {})
   await sleep()
-  server.stop()
+  // The fixture server keeps running for the other test files
+  client.stop()
 })

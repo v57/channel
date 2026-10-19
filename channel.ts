@@ -26,6 +26,21 @@ export interface SubscriptionContext<State = any> {
 type Api<State> = {
   [key: string]: Api<State> | ((body: Body<State>) => any)
 }
+/** What middleware sees of an incoming post, stream start or subscription */
+export interface MiddlewareContext<State = any> {
+  kind: 'post' | 'stream' | 'sub'
+  path: string
+  /** Replace it before calling `next()` to change what the handler gets */
+  body: any
+  context: any
+  state: State
+  sender: Sender
+}
+/**
+ * Runs before the handler. `next()` resolves to the handler's result: the value of a post, `{ topic, body }` of a
+ * sub, the iterator of a stream. Throwing sends an error reply.
+ */
+export type Middleware<State = any> = (ctx: MiddlewareContext<State>, next: () => Promise<any>) => any
 export interface Controller<State> {
   response: (response: any) => void
   subscribe: (topic: string) => void
@@ -45,6 +60,8 @@ export class Channel<State> {
    */
   publisher: (event: SubscriptionEvent) => void = event => this.deliver(event)
   subApi = new ObjectMap<string, SubHandler<State>>()
+  /** Undefined until `use()`, so calls without middleware take the same path as before */
+  middleware?: Middleware<State>[]
   requests = new Map<number, PendingRequest>()
   postApi = new ObjectMap<string, Function<State>>()
   otherPostApi: { path: (path: string) => boolean; request: Function<State> }[] = []
@@ -68,6 +85,26 @@ export class Channel<State> {
   streamOther(path: (path: string) => boolean, request: Stream<State>) {
     this.otherStreamApi.push({ path, request })
     return this
+  }
+  /** Adds middleware, run in registration order before every incoming post, stream start and sub */
+  use(middleware: Middleware<State>) {
+    if (this.middleware) {
+      this.middleware.push(middleware)
+    } else {
+      this.middleware = [middleware]
+    }
+    return this
+  }
+  private runMiddleware(ctx: MiddlewareContext<State>, handler: (ctx: MiddlewareContext<State>) => any): Promise<any> {
+    const middleware = this.middleware!
+    const step = (index: number): Promise<any> => {
+      try {
+        return Promise.resolve(index < middleware.length ? middleware[index](ctx, () => step(index + 1)) : handler(ctx))
+      } catch (e) {
+        return Promise.reject(e)
+      }
+    }
+    return step(0)
   }
   /** Subscriptions whose handler decides the topic (or none, for one-shot) from the body and the connection */
   sub(path: string, handler: SubHandler<State>) {
@@ -192,14 +229,26 @@ export class Channel<State> {
             },
           }
         }
-        const body = api({
-          body: some.body,
-          context: some.context ?? {},
-          sender: controller.sender,
-          state: controller.state,
-          path: some.path,
-          task,
-        })
+        const body = this.middleware
+          ? this.runMiddleware(
+              {
+                kind: 'post',
+                path: some.path,
+                body: some.body,
+                context: some.context ?? {},
+                state: controller.state,
+                sender: controller.sender,
+              },
+              ctx => api({ body: ctx.body, context: ctx.context, sender: ctx.sender, state: ctx.state, path: ctx.path, task }),
+            )
+          : api({
+              body: some.body,
+              context: some.context ?? {},
+              sender: controller.sender,
+              state: controller.state,
+              path: some.path,
+              task,
+            })
         if (id !== undefined) {
           if (body?.then && body?.catch) {
             if (task) controller.sender.requests.set(id, task) // we only need cancellable tasks here cause it halves the performance and reduces by 30% on Promise
@@ -251,7 +300,18 @@ export class Channel<State> {
     } else if (some.sub) {
       const id: number | undefined = some.id
       try {
-        const result = this.subscription(some.sub, some.body, some.context ?? {}, controller)
+        const path: string = some.sub
+        const context = some.context ?? {}
+        let result: any
+        if (this.middleware) {
+          if (!this.subApi.get(path) && !this.eventsApi?.get(path)) throw subscriptionNotFound
+          const { sender, state } = controller
+          result = this.runMiddleware({ kind: 'sub', path, body: some.body, context, state, sender }, ctx =>
+            this.subscription(path, ctx.body, ctx.context, controller),
+          )
+        } else {
+          result = this.subscription(path, some.body, context, controller)
+        }
         if (result?.then) {
           result
             .then((a: SubResult | void) => this.subscribed(id, a, controller))
@@ -317,7 +377,12 @@ export class Channel<State> {
     stream: Stream<State>,
   ) {
     try {
-      const values = await stream({ body, sender: controller.sender, state: controller.state, path, context })
+      const { sender, state } = controller
+      const values: AsyncIterator<any, void, any> = await (this.middleware
+        ? this.runMiddleware({ kind: 'stream', path, body, context, state, sender }, ctx =>
+            stream({ body: ctx.body, sender, state, path, context: ctx.context }),
+          )
+        : stream({ body, sender, state, path, context }))
       controller.sender.streams.set(id, values)
       try {
         while (true) {

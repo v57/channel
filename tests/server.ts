@@ -1,5 +1,6 @@
 import { Channel, Subscription, type Cancellable } from '../channel'
 import '../server'
+import { rateLimit } from '../middleware'
 
 export const events = {
   hello: new Subscription(),
@@ -7,7 +8,12 @@ export const events = {
 
 interface State {
   name?: string
+  /** Connection number */
+  id: number
+  /** The headers the connection was opened with */
+  headers: Record<string, string | undefined>
 }
+let connections = 0
 
 /** 2049, or `CHANNEL_TEST_PORT` when another fixture already runs there */
 export const port = Number(process.env.CHANNEL_TEST_PORT ?? 2049)
@@ -20,6 +26,8 @@ export let stats = {
   once: 0,
 }
 export const channel = new Channel<State>()
+  // 2 calls per second per connection
+  .use(rateLimit({ key: ctx => `${ctx.state.id}`, limit: 2, window: 1, paths: path => path === 'v2/rate' }))
   // Simple api that will return 'world' string
   .post('hello', () => 'world')
   // Returns whatever client have on it's 'hello' api
@@ -95,6 +103,7 @@ export const channel = new Channel<State>()
   .post('v2/error/code', () => {
     throw { message: 'slow down', code: 'rate_limited', info: { retryAfter: 1 } }
   })
+  .post('v2/rate', () => 'ok')
   // Subscriptions with dynamic topics: { room } joins 'room/<room>', with 'joined' as the snapshot
   .sub('v2/room', ({ body }) => {
     stats.rooms += 1
@@ -125,7 +134,7 @@ export const channel = new Channel<State>()
 
 // Listens to 127.0.0.1:2049
 // can be replaced with 'ip:port' string
-export const server = channel.listen(port)
+export const server = channel.listen(port, { state: headers => ({ id: ++connections, headers }) })
 
 async function sleep(seconds: number = 0.001) {
   await new Promise(resolve => {
