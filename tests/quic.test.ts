@@ -119,7 +119,7 @@ test('post', async () => {
   const c = await client()
   expect(await c.send('hello')).toBe('world')
   expect(await c.send('echo', { a: [1, 'two'] })).toEqual({ a: [1, 'two'] })
-  expect(c.send('notfound')).rejects.toBe('api not found')
+  await expect(c.send('notfound')).rejects.toMatchObject({ message: 'api not found' })
 })
 test('batching', async () => {
   const c = await client()

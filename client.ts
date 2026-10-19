@@ -1,6 +1,6 @@
 import { Channel, ObjectMap, makeSender } from './channel'
 import type { EventBody, Sender, SubscriptionEvent, Subscription } from './channel'
-export { Channel, ObjectMap, type Sender } from './channel'
+export { Channel, ChannelError, ObjectMap, type Sender } from './channel'
 
 declare module './channel' {
   interface Channel<State> {

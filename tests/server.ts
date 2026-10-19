@@ -9,6 +9,9 @@ interface State {
   name?: string
 }
 
+/** 2049, or `CHANNEL_TEST_PORT` when another fixture already runs there */
+export const port = Number(process.env.CHANNEL_TEST_PORT ?? 2049)
+
 export let stats = {
   mirrorEvents: 0,
   streamCancel: 0,
@@ -81,6 +84,14 @@ export const server = new Channel<State>()
   .stream('mirror/stream/cancel', async function* ({ sender }) {
     for await (const value of sender.values('stream/cancel')) yield value
   })
+  // Wire v2 (docs/v2.md), the routes every port's interop tests use
+  // Structured errors: message, code and info
+  .post('v2/error', () => {
+    throw { message: 'banned', code: 403, info: { remaining: 5 } }
+  })
+  .post('v2/error/code', () => {
+    throw { message: 'slow down', code: 'rate_limited', info: { retryAfter: 1 } }
+  })
   // Sets the events
   .events(events)
   // Adds api from another Channel (State type should be the same)
@@ -90,7 +101,7 @@ export const server = new Channel<State>()
   )
   // Listens to 127.0.0.1:2049
   // can be replaced with 'ip:port' string
-  .listen(2049)
+  .listen(port)
 
 async function sleep(seconds: number = 0.001) {
   await new Promise(resolve => {

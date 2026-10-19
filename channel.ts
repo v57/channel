@@ -142,7 +142,7 @@ export class Channel<State> {
       const api = this.postApi.get(some.path) ?? this.otherPostApi.find(a => a.path(some.path))?.request
       let task: CancellableRequest | undefined
       try {
-        if (!api) throw 'api not found'
+        if (!api) throw apiNotFound
         if (id !== undefined) {
           task = {
             isCancelled: false,
@@ -156,7 +156,7 @@ export class Channel<State> {
             cancel() {
               this.isCancelled = true
               this.cancelActions?.forEach(action => action())
-              controller.response({ id, error: 'cancelled' })
+              controller.response({ id, error: 'cancelled', code: 'cancelled' })
             },
           }
         }
@@ -180,7 +180,7 @@ export class Channel<State> {
                 onDone()
               })
               .catch((e: any) => {
-                if (!task?.isCancelled) controller.response({ id, error: `${e}` })
+                if (!task?.isCancelled) controller.response(errorResponse(id, e))
                 onDone()
               })
           } else {
@@ -190,7 +190,7 @@ export class Channel<State> {
         }
       } catch (e) {
         if (id !== undefined) {
-          if (!task?.isCancelled) controller.response({ id, error: `${e}` })
+          if (!task?.isCancelled) controller.response(errorResponse(id, e))
           if (task) controller.sender.requests.delete(id)
         }
       }
@@ -198,11 +198,11 @@ export class Channel<State> {
       const id: number | undefined = some.id
       try {
         const api = this.streamApi.get(some.stream) ?? this.otherStreamApi.find(a => a.path(some.stream))?.request
-        if (!api) throw 'api not found'
+        if (!api) throw apiNotFound
         if (id === undefined) throw 'stream requires id'
         this.streamRequest(id, controller, some.stream, some.body, some.context ?? {}, api)
       } catch (e) {
-        if (id !== undefined) controller.response({ id, error: `${e}` })
+        if (id !== undefined) controller.response(errorResponse(id, e))
       }
     } else if (some.cancel !== undefined) {
       try {
@@ -220,7 +220,7 @@ export class Channel<State> {
       const id: number | undefined = some.id
       const subscription = this.eventsApi?.get(some.sub)
       try {
-        if (!subscription) throw 'subscription not found'
+        if (!subscription) throw subscriptionNotFound
         let topic = subscription._topic(some.body)
         topic = subscription.prefix + '/' + topic
         const body = subscription._body(some.body)
@@ -230,13 +230,13 @@ export class Channel<State> {
               controller.subscribe(topic)
               controller.response({ id, topic, body: a })
             })
-            .catch((e: any) => controller.response({ id, error: `${e}` }))
+            .catch((e: any) => controller.response(errorResponse(id!, e)))
         } else {
           controller.subscribe(topic)
           controller.response({ id, topic, body })
         }
       } catch (e) {
-        if (id !== undefined) controller.response({ id, error: `${e}` })
+        if (id !== undefined) controller.response(errorResponse(id, e))
       }
     } else if (some.unsub) {
       controller.unsubscribe(some.unsub)
@@ -279,7 +279,7 @@ export class Channel<State> {
         }
       } catch {}
     } catch (e) {
-      controller.response({ id, error: `${e}` })
+      controller.response(errorResponse(id, e))
     }
     controller.sender.streams.delete(id)
   }
@@ -360,7 +360,56 @@ export interface Response {
   topic?: string
   body?: any
   error?: any
+  /** Error code: a library code (`not_found`, `cancelled`, ...) or the application's own */
+  code?: string | number
+  /** Error details, any JSON */
+  info?: any
   done?: boolean
+}
+
+/** What requests reject with. `String(error)` is the message, like the plain string errors of v1. */
+export class ChannelError extends Error {
+  declare code?: string | number
+  declare info?: any
+  constructor(message: string, code?: string | number, info?: any) {
+    super(message)
+    this.name = 'ChannelError'
+    if (code !== undefined) this.code = code
+    if (info !== undefined) this.info = info
+  }
+  override toString() {
+    return this.message
+  }
+  static from(response: Response): ChannelError {
+    const error = response.error
+    return new ChannelError(typeof error === 'string' ? error : `${error}`, response.code, response.info)
+  }
+}
+
+const apiNotFound = { message: 'api not found', code: 'not_found' }
+const subscriptionNotFound = { message: 'subscription not found', code: 'not_found' }
+
+/**
+ * The error reply for a thrown value: a string is the message; an object with a string `message` (an `Error`, a
+ * `ChannelError` or `{ message, code, info }`) also passes its `code` and `info`; anything else is converted with `String`.
+ */
+export function errorResponse(id: number, e: any): Response {
+  let error: string
+  let code: any
+  let info: any
+  if (typeof e === 'string') {
+    error = e
+  } else if (e !== null && typeof e === 'object' && typeof e.message === 'string') {
+    error = e.message
+    code = e.code
+    info = e.info
+  } else {
+    error = String(e)
+  }
+  const response: Response = { id, error: error || 'error' }
+  if (typeof code === 'string' || Number.isInteger(code)) response.code = code
+  if (info !== undefined) response.info = info
+  return response
 }
 
 interface Publisher {
@@ -503,7 +552,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           options?.context,
           response => {
             if (response.error) {
-              failure(response.error)
+              failure(ChannelError.from(response))
             } else {
               success(response.body)
             }
@@ -526,7 +575,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           options?.context,
           response => {
             if (response.error) {
-              failure(response.error)
+              failure(ChannelError.from(response))
             } else {
               success(response.body)
             }
@@ -586,7 +635,7 @@ export function makeSender<State>(ch: Channel<State>, connection: ConnectionInte
           options?.context,
           response => {
             if (response.error) {
-              failure(response.error)
+              failure(ChannelError.from(response))
             } else {
               const topic = response.topic!
               const cancel = connection.addTopic(topic, event)
@@ -663,7 +712,7 @@ class Values {
     this.onSend(request)
   }
   private processResponse(response: Response): IteratorValue<any> {
-    if (response.error) throw response.error
+    if (response.error) throw ChannelError.from(response)
     return { value: response.body, done: response.done ? true : false }
   }
   async next(): Promise<IteratorValue<any>> {

@@ -8,7 +8,7 @@ import { isIP, SocketAddress } from 'node:net'
 import { Channel, makeSender, type SubscriptionEvent } from './channel'
 import { WebSocketClient, type Options, type Socket } from './client'
 import { Subscriptions, type BodyContext, type ListenOptions } from './server'
-export { Channel, ObjectMap, type Sender } from './channel'
+export { Channel, ChannelError, ObjectMap, type Sender } from './channel'
 
 declare module './channel' {
   interface Channel<State> {

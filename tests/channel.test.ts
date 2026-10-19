@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { Channel, Subscription } from '../channel'
 import '../client'
-import { stats, server, events } from './server'
+import { stats, server, events, port } from './server'
 
 const clientEvents = {
   names: new Subscription(),
@@ -35,7 +35,7 @@ const client = new Channel()
     },
   })
   .events(clientEvents)
-  .connect(2049)
+  .connect(port)
 
 test('post/hello', async () => {
   const response = await client.send('hello')
@@ -52,7 +52,7 @@ test('post/noreturn', async () => {
 })
 test('post/notfound', async () => {
   const response = client.send('notfound')
-  expect(response).rejects.toBe('api not found')
+  await expect(response).rejects.toMatchObject({ message: 'api not found' })
 })
 test('events', async () => {
   events.hello.send('test', 'event 0')
@@ -89,7 +89,7 @@ test('events/notfound', async () => {
     })
     await sleep()
   } catch (error) {
-    expect(error).toBe('subscription not found')
+    expect(String(error)).toBe('subscription not found')
   }
 })
 test('stream', async () => {
@@ -109,9 +109,9 @@ test('stream/cancel', async () => {
   expect(stats.streamCancel).toBe(3)
 })
 test('stream/notfound', async () => {
-  const client = new Channel().connect(2049)
+  const client = new Channel().connect(port)
   const response = client.send('notfound')
-  expect(response).rejects.toBe('api not found')
+  await expect(response).rejects.toMatchObject({ message: 'api not found' })
 })
 test('server/post', async () => {
   const response = await client.send('mirror')
@@ -145,19 +145,19 @@ test('server/stream/cancel', async () => {
   expect(valuesSent).toBe(3)
 })
 test('state/auth', async () => {
-  const client = new Channel().connect(2049)
+  const client = new Channel().connect(port)
   await client.send('auth', { name: 'tester' })
   const name = await client.send('auth/name')
   expect(name).toBe('tester')
   client.stop()
 })
 test('state/unauthorized', async () => {
-  const client = new Channel().connect(2049)
+  const client = new Channel().connect(port)
   const response = client.send('auth/name')
-  expect(response).rejects.toBe('unauthorized')
+  await expect(response).rejects.toMatchObject({ message: 'unauthorized' })
 })
 test('reconnect/replays unanswered requests', async () => {
-  const client = new Channel().connect(2049)
+  const client = new Channel().connect(port)
   await client.send('hello')
   const response = client.send('slow')
   client.ws.ws?.close()

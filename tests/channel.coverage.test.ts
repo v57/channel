@@ -207,7 +207,7 @@ test('Channel.receiveOne cancel runs every task onCancel action', async () => {
   await tick()
 
   expect(onCancelCalls).toEqual([1, 2])
-  expect(responses).toContainEqual({ id: 5, error: 'cancelled' })
+  expect(responses).toContainEqual({ id: 5, error: 'cancelled', code: 'cancelled' })
   expect(sender.requests.size).toBe(0)
 })
 
@@ -280,7 +280,7 @@ test('makeSender.request rejects and marks sent id', async () => {
 
   ch.receiveOne({ id: rid, error: 'failed' }, controller)
 
-  await expect(request.response).rejects.toBe('failed')
+  await expect(request.response).rejects.toMatchObject({ message: 'failed' })
   expect(sentIds).toEqual([200])
 })
 
