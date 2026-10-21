@@ -53,6 +53,21 @@ test('1. structured errors carry message, code and info', async () => {
   client.stop()
 })
 
+test('1b. a stream that fails after its first value ends with the error', async () => {
+  const client = new Channel().connect(address)
+  const values: any[] = []
+  const error = await failure(
+    (async () => {
+      for await (const value of client.values('v2/stream/error')) values.push(value)
+    })(),
+  )
+  expect(values).toEqual([1])
+  expect(error.message).toBe('broke')
+  expect(error.code).toBe('internal')
+  expect(error.info).toEqual({ at: 1 })
+  client.stop()
+})
+
 test('2. v1 string errors and library codes', async () => {
   const client = new Channel().connect(address)
   const unauthorized = await failure(client.send('auth/name'))

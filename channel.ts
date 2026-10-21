@@ -409,7 +409,10 @@ export class Channel<State> {
             controller.response({ id, body: value.value })
           }
         }
-      } catch {}
+      } catch (e) {
+        // A stream that fails after it started ends with the error, unless it was cancelled
+        if (controller.sender.streams.get(id) === values) controller.response(errorResponse(id, e))
+      }
     } catch (e) {
       controller.response(errorResponse(id, e))
     }

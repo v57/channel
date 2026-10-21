@@ -108,6 +108,11 @@ export const channel = new Channel<State>()
     throw { message: 'slow down', code: 'rate_limited', info: { retryAfter: 1 } }
   })
   // Never answers, counts the cancellations
+  // Yields 1, then fails with a structured error
+  .stream('v2/stream/error', async function* () {
+    yield 1
+    throw { message: 'broke', code: 'internal', info: { at: 1 } }
+  })
   .post('v2/never', ({ task }) => {
     task?.onCancel(() => (stats.cancels += 1))
     return new Promise(() => {})
