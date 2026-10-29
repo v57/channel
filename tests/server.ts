@@ -1,5 +1,7 @@
 import { Channel, Subscription, type Cancellable } from '../channel'
+import { readFileSync } from 'node:fs'
 import '../server'
+import '../quic'
 import { rateLimit } from '../middleware'
 
 export const events = {
@@ -161,6 +163,12 @@ export const channel = new Channel<State>()
 // Listens to 127.0.0.1:2049
 // can be replaced with 'ip:port' string
 export const server = channel.listen(port, { state: headers => ({ id: ++connections, headers }) })
+// The same routes over QUIC on UDP 2049: quic://127.0.0.1:2049, with tests/quic/cert.pem (localhost, 127.0.0.1, ::1)
+export const quicServer = await channel.listenQuic(port, {
+  key: readFileSync(`${import.meta.dir}/quic/key.pem`),
+  cert: readFileSync(`${import.meta.dir}/quic/cert.pem`),
+  state: headers => ({ id: ++connections, headers }),
+})
 
 async function sleep(seconds: number = 0.001) {
   await new Promise(resolve => {
