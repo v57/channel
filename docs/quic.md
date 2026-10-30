@@ -2,7 +2,8 @@
 
 An optional second transport next to WebSocket. **Experimental**: it runs on Bun's `node:quic`, which Bun itself
 marks experimental (Bun 1.4). WebSocket stays the default and the fallback: UDP is blocked on some networks, browsers
-can't use it (that would need WebTransport, which Bun can't serve), and most ports don't implement it yet.
+can't use it (that would need WebTransport, which Bun can't serve), and Dart, Ruby and PHP don't implement it
+(see the end of this page).
 
 What it gives over WebSocket: a 1-RTT handshake including TLS, encryption on every connection, better loss recovery,
 and connection migration (a phone moving between Wi-Fi and cellular keeps its connection).
@@ -38,8 +39,12 @@ QUIC has no plaintext mode, so the server always needs a key and certificate (PE
 A self-signed certificate for local use:
 ``` sh
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -keyout key.pem -out cert.pem \
-  -days 365 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
+  -days 365 -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost,IP:127.0.0.1" \
+  -addext "extendedKeyUsage=serverAuth"
 ```
+Apple's TLS (the Swift client) trusts a self-signed `ca` only when it is valid for at most 825 days and has the
+`serverAuth` extended key usage; a pinned fingerprint skips that. macOS's own `/usr/bin/openssl` (LibreSSL) makes an
+EC certificate Apple rejects with this command: use `-newkey rsa:2048` there, or OpenSSL 3.
 
 ## Wire format
 
@@ -60,6 +65,9 @@ For implementations in other languages. Everything not listed here works exactly
   a hello close the connection.
 - **Keepalive.** A zero-length frame is a keepalive and is ignored. Both sides set the QUIC idle timeout
   (`max_idle_timeout`) to 30 s; the client sends a keepalive every 15 s.
+- **One UDP socket per client connection.** A client dials every connection, reconnects included, from its own
+  socket instead of sharing one endpoint: Network.framework's QUIC servers (Swift's HubServer) take only one
+  connection per client address and port.
 - **Reconnect.** Same as WebSocket: the client reconnects with the same backoff (see [client.md](client.md)) and
   replays its unanswered requests.
 
@@ -89,7 +97,31 @@ CPU per request, and a network switch (connection migration).
 
 ## Status in the other implementations
 
-TypeScript (this repo) is the only implementation so far. Libraries that would fit, from the 2026-10-10 survey:
-Rust (quinn), Go (quic-go, frozen port), C (msquic, ngtcp2), Elixir (quicer), Python (aioquic), C# (System.Net.Quic),
-Zig (msquic through its C interop), Java/Kotlin (Netty QUIC or Kwik, heavy), Swift (Network.framework on Apple, frozen
-port). Dart, Ruby and PHP have no usable QUIC library and stay on WebSocket.
+QUIC client and server, each tested against this reference in both directions (its client against `listenQuic` in
+`tests/server.ts`, this client against its server). The QUIC library is optional wherever the language's SDK doesn't
+already have QUIC, so a WebSocket-only install gets none of it.
+
+| Language | QUIC library | How it's optional | Reconnect + replay |
+| --- | --- | --- | --- |
+| TypeScript | Bun's `node:quic` | import `channel/quic` | yes |
+| Go | quic-go | nested module `github.com/v57/channel-go/quic` | yes |
+| Swift | Network.framework (Apple platforms) | built in; client in ChannelSwift, server in HubServer's ChannelServer (`QUICServer`) | yes |
+| C# | `System.Net.Quic` (needs libmsquic on Linux and macOS) | built in | yes |
+| Rust | quinn, rustls (ring) | Cargo feature `quic` | no: the port's client doesn't reconnect |
+| Python | aioquic | extra `channel-py[quic]`, imported lazily | yes (requests made while disconnected) |
+| Elixir | quicer (msquic) | optional Hex dependency | no: the port's client doesn't reconnect |
+| Java | kwik (pure Java, LGPL-3.0) | module `channel-java-quic` | no: the port's client doesn't reconnect |
+| Kotlin (JVM) | kwik (pure Java, LGPL-3.0) | module `channel-kotlin-quic`, `connectQuic` / `listenQuic` | no: the port's client doesn't reconnect |
+| C | OpenSSL 3.5+ native QUIC | CMake option `CHANNEL_QUIC`, library `channel_c_quic` | no: the port's client doesn't reconnect |
+| Zig | OpenSSL 3.5+ native QUIC (no pure-Zig library runs on Zig 0.15) | build option `-Dquic=true`; the default build stays pure Zig | no: the port's client doesn't reconnect |
+
+Dart, Ruby and PHP have no usable QUIC library and stay on WebSocket.
+
+Notes from the ports:
+- A self-signed certificate with `CA:TRUE` (like `tests/quic/cert.pem`) isn't accepted as a server certificate by
+  rustls; the Rust client trusts a server certificate identical to one in `ca` directly, after checking its names.
+- Bun's client offers QUIC v2 through compatible version negotiation (RFC 9368). kwik's server (Java, Kotlin) switches
+  to it even when only v1 is configured, so both accept v1 and v2. The stream format is the same in both versions.
+- kwik can't turn 0-RTT off: channel-java's server replaces its session ticket store, channel-kotlin's refuses a
+  connection that sent early data.
+- OpenSSL 3.5 can't lower the stream limits, so the C server resets any stream after the first.
