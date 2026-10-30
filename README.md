@@ -56,5 +56,5 @@ const client = new Channel().connect('quic://localhost:4433', { quic: { ca: cert
 - [Server](docs/server.md): handlers, subscriptions, publish, middleware, listen options
 - [Wire v2](docs/v2.md): errors, dynamic topics, middleware, request options, connection, interop fixture
 - [Message structure](docs/structure.md)
-- [QUIC transport](docs/quic.md)
+- [QUIC transport](docs/quic.md): also in Go, Swift, C#, Rust, Python, Elixir, Java, Kotlin, C and Zig; Dart, Ruby and PHP stay on WebSocket
 - [Performance](docs/performance.md)
