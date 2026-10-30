@@ -1,7 +1,7 @@
 /// <reference path="./types/node-quic.d.ts" />
 // QUIC transport (experimental, see docs/quic.md): one bidirectional stream per connection carrying the same
 // JSON messages as a WebSocket, each one prefixed with its length as a QUIC variable-length integer.
-import { connect, listen, type QuicSession, type QuicStream } from 'node:quic'
+import { QuicEndpoint, connect, listen, type QuicSession, type QuicStream } from 'node:quic'
 import { createPrivateKey } from 'node:crypto'
 import { lookup } from 'node:dns/promises'
 import { isIP, SocketAddress } from 'node:net'
@@ -141,6 +141,7 @@ export class QuicSocket implements Socket {
   onclose: ((event: any) => void) | null = null
   onerror: ((event: any) => void) | null = null
   onmessage: ((event: any) => void) | null = null
+  private endpoint?: QuicEndpoint
   private session?: QuicSession
   private connection?: Connection
   private closed = false
@@ -158,7 +159,10 @@ export class QuicSocket implements Socket {
     const remote = new SocketAddress({ address: ip, port: Number(url.port), family: isIP(ip) === 6 ? 'ipv6' : 'ipv4' })
     // Bun only matches certificates against a host name, so IP addresses are checked here instead
     const byIP = isIP(host) !== 0 && !tls.servername
+    // Its own UDP socket, as Network.framework's QUIC servers take one connection per client address and port
+    this.endpoint = new QuicEndpoint()
     const session = await connect(remote, {
+      endpoint: this.endpoint,
       alpn,
       servername: tls.servername ?? (byIP ? undefined : host),
       ca: tls.ca && Buffer.from(tls.ca as string),
@@ -197,6 +201,7 @@ export class QuicSocket implements Socket {
     this.closed = true
     clearInterval(this.timer)
     this.session?.destroy()
+    this.endpoint?.close().catch(() => {})
     this.onclose?.({})
   }
 }
