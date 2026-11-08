@@ -14,6 +14,22 @@ Powerful and lightweight communication built for modern language. Run websocket 
 # Installation
 `bun add v57/channel`
 
+# Libraries
+
+One package, imported by entry point. Each one re-exports `Channel` and adds its transport or helpers to it.
+
+| Library | Purpose | Platforms | Import |
+| --- | --- | --- | --- |
+| [`channel/server`](docs/server.md) | `listen()`: the WebSocket server, `publish()` to topics | Bun | `import { Channel } from 'channel/server'` |
+| [`channel/client`](docs/client.md) | `connect()`: the WebSocket client with reconnect, timeouts and connection state | Bun, browsers | `import { Channel, ChannelError } from 'channel/client'` |
+| [`channel/quic`](docs/quic.md) | `listenQuic()` and `quic://` addresses in `connect()` (experimental) | Bun (`node:quic`) | `import { Channel } from 'channel/quic'` |
+| `channel/process` | `process()`: a `Sender` that calls the channel's own handlers in the same process | Bun, browsers | `import { Channel } from 'channel/process'` |
+| [`channel/middleware`](docs/v2.md#3-middleware) | `logger()` and `rateLimit()` for `use()` | Bun, browsers | `import { logger, rateLimit } from 'channel/middleware'` |
+| `channel/more` | `LazyState`, `LazyStates`: a value computed on demand for stream handlers; `setNeedsUpdate()` recomputes it for every reader of `makeIterator()`, at most every `delay()` seconds, optionally deduplicated | Bun | `import { LazyState, LazyStates } from 'channel/more'` |
+
+`channel/channel` is the core the others build on (`Channel`, `Sender`, `ChannelError`, the handler and middleware
+types); apps import it only for types. Implementations in other languages are listed in [docs/ports.md](docs/ports.md).
+
 # Usage
 
 ``` ts
@@ -52,9 +68,12 @@ const client = new Channel().connect('quic://localhost:4433', { quic: { ca: cert
 ```
 
 # Docs
+- [Overview](docs/README.md): what Channel is, the wire format pages, every page
 - [Client](docs/client.md): requests, streams, subscriptions, errors, timeouts, reconnect
 - [Server](docs/server.md): handlers, subscriptions, publish, middleware, listen options
 - [Wire v2](docs/v2.md): errors, dynamic topics, middleware, request options, connection, interop fixture
-- [Message structure](docs/structure.md)
+- [Message structure](docs/structure.md): message shapes, dispatch, and request ids (a response answers a request only on
+  the connection the request went to)
+- [Ports](docs/ports.md): the implementations in other languages, their packages and status
 - [QUIC transport](docs/quic.md): also in Go, Swift, C#, Rust, Python, Elixir, Java, Kotlin, C and Zig; Dart, Ruby and PHP stay on WebSocket
 - [Performance](docs/performance.md)

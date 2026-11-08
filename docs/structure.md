@@ -88,6 +88,23 @@ CancelRequest { // cancels stream, doesn't get a response
 }
 ```
 
+# Request ids and connections
+
+- The peer that sends a request picks its id. The TypeScript library takes ids from one counter per `Channel`, shared by
+  every connection of that channel (posts, streams and subscriptions alike).
+- Ids of incoming requests belong to the connection they came on. A `cancel` cancels only a request of the connection
+  that sends it.
+- **A response answers a request only on the connection the request went to.** A message with an `id` that is not
+  itself a request (a post response, a stream value, error or `done`, a subscription response with its snapshot) is
+  looked up among the requests sent on that same connection. If the request went to another connection, or there is
+  none, the message is ignored.
+
+The last rule matters for any peer with more than one connection. A server that forwards calls to one of its peers
+(the Hub calling a service for an app) sends them with the same counter it uses everywhere, so ids are easy to guess.
+Without the rule, any other connected peer could answer those calls, feed values into the streams or end them.
+Every port must follow it; [ports.md](ports.md) says which ones do. The TypeScript tests are in
+`tests/reply-origin.test.ts`.
+
 # Example processing
 
 ``` ts
@@ -139,11 +156,12 @@ receiveOne(some: any) {
   } else if (some.topic) {
     if (some.id) {
       const request = getRequest(some.id) // the subscription, which delivers the snapshot to its own handler
-      request.receive(some)
+      if (request && request.connection === thisConnection) request.receive(some)
     }
     else if ('body' in some) receivedEvent(some.topic, some.body)
   } else if (some.id !== undefined) {
     const request = getRequest(some.id)
+    if (!request || request.connection !== thisConnection) return // see "Request ids and connections"
     request.receive(some)
     if (request.isStream) {
       if (some.done) {
