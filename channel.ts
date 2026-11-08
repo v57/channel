@@ -345,8 +345,9 @@ export class Channel<State> {
       if (some.id !== undefined) {
         // A subscription response. Active subscriptions keep their request, so the snapshots of their
         // resubscriptions after a reconnect reach them too.
+        // Only from the connection the subscription went to: ids are one counter for every connection
         const request = this.requests.get(some.id)
-        if (request) {
+        if (request && request.request.sender === controller.sender) {
           if (!('sub' in request.request)) this.requests.delete(some.id)
           request.response(some)
         }
@@ -354,12 +355,14 @@ export class Channel<State> {
         controller.event(some.topic, some.body)
       }
     } else if (some.id !== undefined) {
+      // A response answers a request only on the connection it went to. Ids are one counter for every connection,
+      // so another peer of a server could otherwise answer calls the server made to someone else.
       const request = this.requests.get(some.id)
-      if (!request) return
+      if (!request || request.request.sender !== controller.sender) return
       if (!('stream' in request.request && !some.done)) {
         this.requests.delete(some.id)
       }
-      if (request) request.response(some)
+      request.response(some)
     }
   }
   private subscription(path: string, body: any, context: any, controller: Controller<State>): any {
