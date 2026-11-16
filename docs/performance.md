@@ -1,22 +1,27 @@
 # Performance
 
-## Tell me how fast is it?!
+How fast the TypeScript library is, and why. The other languages are scored by the benchmark in the Channel
+workspace (`benchmark/`), not here.
 
-JS is fast! A server on a single thread can handle over 4 million sync functions and over 2 million async functions per second. So you won't need to think about scaling it for a long time.
-Spend your budget on scaling DB or something else while this thing is delivering a huge performance bump
+## Measurements
 
+A server on a single thread handles over 4 million synchronous handlers and over 2 million async handlers per second.
 
-### Channel
-1 client can send 1 million requests per second to 1 server while server's cpu usage sits at 22% and 55mb or ram
-### Socket.IO
-1 client can send 170k requests per second to 1 server while server's cpu usage sits at 89% and 110mb or ram
+| Library | Requests per second, one client to one server | Server CPU | Server memory |
+| --- | ---: | ---: | ---: |
+| Channel | 1 million | 22% | 55 MB |
+| Socket.IO | 170k | 89% | 110 MB |
 
-## Why is it so fast?
-1. No dependencies
-2. Very simple logic
-3. Channel by design doesn't need much code.
-- The core is about 900 lines, the WebSocket client 350 and the server 170 (measured with scc, October 2026, after wire v2)
-- Socket.IO's client has 2595 lines of code, and its hello world server pulls in **44708** lines with its dependencies
-4. WebSocket server is running on C by Bun
-5. When client sends a lot of requests, they start packing into a single request, highly reducing load on its websocket part
-6. There are two ways in handling Key-Value storage: Map and Object. Map has slightly faster reads and 25 times slower writes. Channel utilizes both of them for maximum performance
+Over QUIC the numbers are lower; [QUIC transport](quic.md#measurements) has them next to WebSocket's.
+
+## Why it is fast
+
+1. No dependencies.
+2. Little code. The core is about 900 lines, the WebSocket client 350 and the server 170 (measured with scc, October
+   2026, after wire v2). Socket.IO's client has 2,595 lines, and its hello world server pulls in 44,708 lines with its
+   dependencies.
+3. The WebSocket server is Bun's, written in C.
+4. When a client sends many requests at once, they are packed into one frame (a batch), which takes most of the load
+   off the WebSocket.
+5. Key-value lookups use both `Map` and plain objects: `Map` reads slightly faster, and objects write about 25 times
+   faster, so each is used where it wins.

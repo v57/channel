@@ -8,9 +8,14 @@ What it gives over WebSocket: a 1-RTT handshake including TLS, encryption on eve
 and connection migration (a phone moving between Wi-Fi and cellular keeps its connection).
 The protocol itself doesn't change: same messages, same batching, same requests, streams and subscriptions.
 
-``` ts
-// Server
+The server needs a key and certificate in PEM (Swift's takes a PKCS#12 file); the client below trusts that
+self-signed certificate with `ca`, as [Certificates](#certificates) explains.
+
+A server:
+
+```ts
 import { Channel } from 'channel/quic'
+
 const key = await Bun.file('key.pem').text()
 const cert = await Bun.file('cert.pem').text()
 const server = await new Channel().post('hello', () => 'world').listenQuic(4433, { key, cert })
@@ -18,11 +23,210 @@ const server = await new Channel().post('hello', () => 'world').listenQuic(4433,
 await server.stop()
 ```
 
-``` ts
-// Client: importing 'channel/quic' makes connect() accept quic:// addresses
+```swift
+// ChannelServer, Apple platforms; openssl pkcs12 -export -inkey key.pem -in cert.pem -out server.p12
+import ChannelServer
+import Foundation
+
+let router = ChannelRouter().post("hello") { _ in "world" }
+let quic = try QUICServer(ListenAddress(port: 4433),
+                          pkcs12: Data(contentsOf: URL(fileURLWithPath: "server.p12")), password: "secret")
+router.listen(quic, queue: queue) { result in print("quic:", result) }
+```
+
+```go
+import "github.com/v57/channel-go/quic" // a module of its own
+
+srv, err := quic.Listen(channelgo.NewChannel().Post("hello", func(channelgo.Body) (any, error) {
+	return "world", nil
+}), 4433, quic.ListenOptions{Key: key, Cert: cert}) // PEM []byte
+```
+
+```py
+# uv sync --extra quic
+key, cert = open("key.pem").read(), open("cert.pem").read()
+server = Channel().post("hello", lambda _: "world").listen_quic(4433, {"key": key, "cert": cert})
+await server.wait_started()
+```
+
+```rs
+// channel-rs with features = ["quic"]
+use channel_rs::QuicListenOptions;
+
+let cert = std::fs::read("cert.pem")?;
+let key = std::fs::read("key.pem")?;
+let mut channel = Channel::<State>::new();
+channel.post_value("hello", |_request: PostRequest<'_, State, (), ()>| Ok("world"))?;
+let mut server = channel.listen_quic("127.0.0.1:4433", QuicListenOptions::new(cert, key))?;
+// poll it like a WebSocket server
+```
+
+```kotlin
+// module channel-kotlin-quic
+import channel.quic.QuicListenOptions
+import channel.quic.listenQuic
+
+val server = Channel<MutableMap<String, Any?>>()
+  .post<Unit, String, Unit>("hello") { "world" }
+  .listenQuic(4433, QuicListenOptions(key = key, cert = cert))
+while (true) server.poll()
+```
+
+```java
+// module channel-java-quic
+var server = new Channel<Void>()
+    .post("hello", String.class, r -> "world")
+    .listenQuic(4433, new ListenOptions<Void>().withCertificate(cert, key)); // certificate first
+while (true) {
+  if (!server.poll()) Thread.onSpinWait();
+}
+```
+
+```cs
+// System.Net.Quic: needs libmsquic on Linux and macOS
+var server = new Channel<Dictionary<string, string?>>()
+    .Post("hello", _ => "world")
+    .ListenQuic(4433, new QuicListenOptions<Dictionary<string, string?>> { Key = key, Cert = cert });
+```
+
+```dart
+import 'package:channel_dart/quic.dart'; // OpenSSL 3.5+ through dart:ffi
+
+await Channel<Object?>().post('hello', (_) => 'world')
+    .listenQuic(4433, options: QuicListenOptions(key: key, cert: cert));
+```
+
+```php
+// ext-ffi and OpenSSL 3.5+; unlike listen(), it runs inside a coroutine
+Coroutine::run(static function () use ($key, $cert): void {
+    $server = (new Channel())->post('hello', static fn (): string => 'world')
+        ->listenQuic(4433, ['key' => $key, 'cert' => $cert]);
+    // ...
+});
+```
+
+```rb
+require 'channel_rb/quic' # OpenSSL 3.5+ through fiddle
+
+server = ChannelRB::Channel.new.post('hello') { 'world' }.listen_quic(4433, key: key, cert: cert)
+```
+
+```ex
+# mix.exs also needs {:quicer, "~> 0.4.12"}
+listener =
+  ChannelEx.new()
+  |> ChannelEx.post("hello", fn _ -> "world" end)
+  |> ChannelEx.listen_quic(4433, key: File.read!("key.pem"), cert: File.read!("cert.pem"))
+```
+
+```c
+#include "channel-c/channel_c_quic.h" /* -DCHANNEL_QUIC=ON, link channel_c_quic */
+
+channel_c_quic_server_options_t quic = { .cert_pem = cert_pem, .key_pem = key_pem };
+channel_c_quic_server_t *server =
+  channel_c_quic_server_listen(ch, "127.0.0.1", 4433, (channel_c_state_factory_t){0}, &quic, &error);
+for (;;) channel_c_quic_server_poll(server);
+```
+
+```zig
+// build.zig: b.dependency("channel_zig", .{ ..., .quic = true })
+var server = try ch.listenQuic(allocator, 4433, .{ .cert = cert_pem, .key = key_pem });
+defer server.deinit();
+while (true) _ = try server.poll();
+```
+
+A client:
+
+```ts
+// Importing 'channel/quic' makes connect() accept quic:// addresses
 import { Channel } from 'channel/quic'
-const client = new Channel().connect('quic://example.com:4433')
+
+const client = new Channel().connect('quic://127.0.0.1:4433', { quic: { ca: cert } })
 console.log(await client.send('hello'))
+```
+
+```swift
+let client = Channel<Void>().connect(URL(string: "quic://127.0.0.1:4433")!, options: ClientOptions(
+  quic: QUICOptions(ca: try Data(contentsOf: URL(fileURLWithPath: "cert.pem")))
+))
+let answer: String = try await client.send("hello")
+```
+
+```go
+conn, err := quic.Connect(channelgo.NewChannel(), "quic://127.0.0.1:4433", quic.Options{CA: cert})
+answer, err := conn.Send("hello", nil)
+```
+
+```py
+client = Channel().connect("quic://127.0.0.1:4433", {"quic": {"ca": cert}})
+print(await client.send("hello"))
+```
+
+```rs
+use channel_rs::QuicOptions;
+
+let mut client = Channel::<State>::new().connect("quic://127.0.0.1:4433", ConnectOptions {
+    quic: QuicOptions { ca: Some(cert), ..QuicOptions::default() },
+    ..ConnectOptions::default()
+})?;
+let answer = client.send::<String, _>("hello", ())?;
+```
+
+```kotlin
+import channel.quic.QuicConnectOptions
+import channel.quic.connectQuic
+
+val client = Channel<MutableMap<String, Any?>>().connectQuic("quic://127.0.0.1:4433", QuicConnectOptions(ca = cert))
+val answer = client.send<String>("hello")
+```
+
+```java
+var client = new Channel<Void>().connect("quic://127.0.0.1:4433",
+    new ConnectOptions<Void>().withQuic(new QuicOptions().withCa(cert)));
+var answer = client.sender().send(String.class, "hello").requireValue();
+```
+
+```cs
+var client = new Channel<Dictionary<string, object?>>().Connect("quic://127.0.0.1:4433", new()
+{
+    Quic = new QuicClientOptions { Ca = cert },
+});
+Console.WriteLine(await client.SendAsync<string>("hello"));
+```
+
+```dart
+final client = Channel<Object?>().connectQuic('quic://127.0.0.1:4433', quic: QuicOptions(ca: cert));
+print(await client.send<String>('hello'));
+```
+
+```php
+Coroutine::run(static function () use ($cert): void {
+    $client = (new Channel())->connect('quic://127.0.0.1:4433', ['quic' => ['ca' => $cert]]);
+    echo $client->send('hello'), "\n";
+});
+```
+
+```rb
+require 'channel_rb/quic'
+
+client = ChannelRB::Channel.new.connect('quic://127.0.0.1:4433', quic: { ca: cert })
+puts client.send('hello')
+```
+
+```ex
+client = ChannelEx.connect(ChannelEx.new(), "quic://127.0.0.1:4433", quic: [ca: File.read!("cert.pem")])
+{:ok, "world"} = ChannelEx.send(client, "hello")
+```
+
+```c
+channel_c_quic_tls_options_t tls = { .ca_pem = cert_pem };
+channel_c_quic_client_t *client = channel_c_quic_client_connect(client_ch, "quic://127.0.0.1:4433", NULL, &tls, &error);
+channel_c_sender_send(channel_c_quic_client_sender(client), "hello", NULL, NULL, &body, &error);
+```
+
+```zig
+var client = try client_ch.connect(allocator, "quic://127.0.0.1:4433", .{ .quic = .{ .ca = cert_pem } });
+defer client.deinit();
 ```
 
 ## Certificates
