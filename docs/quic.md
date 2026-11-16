@@ -2,8 +2,7 @@
 
 An optional second transport next to WebSocket. **Experimental**: it runs on Bun's `node:quic`, which Bun itself
 marks experimental (Bun 1.4). WebSocket stays the default and the fallback: UDP is blocked on some networks, browsers
-can't use it (that would need WebTransport, which Bun can't serve), and Dart, Ruby and PHP don't implement it
-(see the end of this page).
+can't use it (that would need WebTransport, which Bun can't serve), and some networks only pass TCP.
 
 What it gives over WebSocket: a 1-RTT handshake including TLS, encryption on every connection, better loss recovery,
 and connection migration (a phone moving between Wi-Fi and cellular keeps its connection).
@@ -114,8 +113,9 @@ already have QUIC, so a WebSocket-only install gets none of it.
 | Kotlin (JVM) | kwik (pure Java, LGPL-3.0) | module `channel-kotlin-quic`, `connectQuic` / `listenQuic` | no: the port's client doesn't reconnect |
 | C | OpenSSL 3.5+ native QUIC | CMake option `CHANNEL_QUIC`, library `channel_c_quic` | no: the port's client doesn't reconnect |
 | Zig | OpenSSL 3.5+ native QUIC (no pure-Zig library runs on Zig 0.15) | build option `-Dquic=true`; the default build stays pure Zig | no: the port's client doesn't reconnect |
-
-Dart, Ruby and PHP have no usable QUIC library and stay on WebSocket.
+| Dart | OpenSSL 3.5+ native QUIC through `dart:ffi` (no Dart QUIC library) | import `package:channel_dart/quic.dart`; no package added | yes |
+| PHP | OpenSSL 3.5+ native QUIC through `ext-ffi` (no PHP QUIC library) | used only for `quic://` and `listenQuic`; `ext-ffi` is a suggested extension | yes (requests made while disconnected) |
+| Ruby | OpenSSL 3.5+ native QUIC through `fiddle` (no Ruby QUIC library) | `require 'channel_rb/quic'`; no gem added | yes (requests made while disconnected) |
 
 Notes from the ports:
 - A self-signed certificate with `CA:TRUE` (like `tests/quic/cert.pem`) isn't accepted as a server certificate by

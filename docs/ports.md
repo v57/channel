@@ -20,7 +20,7 @@ dependency.
 | TypeScript (reference) | [v57/channel](https://github.com/v57/channel) | `channel` | `bun add v57/channel` | Bun (server, client), browsers (client) |
 | C | [v57/channel-c](https://github.com/v57/channel-c) | CMake libraries `channel_c`, `channel_c_quic` | build with CMake; needs libwebsockets, yyjson, OpenSSL | C17 |
 | C# | [v57/channel-cs](https://github.com/v57/channel-cs) | `ChannelCs` (+ `.Client`, `.Server`, `.Process`) | `dotnet add package ChannelCs` | .NET 10 |
-| Dart | [v57/channel-dart](https://github.com/v57/channel-dart) | `channel_dart` | `dart pub add channel_dart` | Dart SDK 3.11+ |
+| Dart | [v57/channel-dart](https://github.com/v57/channel-dart) | `channel_dart` (QUIC: `package:channel_dart/quic.dart`) | `dart pub add channel_dart` | Dart SDK 3.11+ |
 | Elixir | [v57/channel_ex](https://github.com/v57/channel_ex) | `:channel_ex` | `{:channel_ex, path: "../channel_ex"}` in `mix.exs` | Elixir 1.19+, OTP 28+ |
 | Go | [v57/channel-go](https://github.com/v57/channel-go) | `github.com/v57/channel-go` (QUIC: `…/channel-go/quic`) | `go get github.com/v57/channel-go` | Go 1.25; macOS and Linux, not Windows |
 | Java | [v57/channel-java](https://github.com/v57/channel-java) | `v57.channel:channel-java-core`, `-client`, `-server`, `-process`, `-quic` | Gradle `implementation("v57.channel:channel-java-core:VERSION")` | Java 21 |
@@ -46,14 +46,14 @@ dependency.
 | TypeScript | reference | WS, process | Bun `node:quic` | yes, backoff 100 ms to 5 s | yes (defines them) | yes |
 | C | complete | WS, process | OpenSSL 3.5 (`-DCHANNEL_QUIC=ON`) | no | yes | not yet |
 | C# | complete | WS, process | `System.Net.Quic` (libmsquic) | yes | yes | yes |
-| Dart | complete | WS, process | none | yes | no | yes |
+| Dart | complete | WS, process | OpenSSL 3.5 via `dart:ffi` (`quic.dart`) | yes | no | yes |
 | Elixir | complete | WS, process | quicer (optional dependency) | no | yes | not yet |
 | Go | complete, frozen | WS, process | quic-go (separate module) | yes, every 100 ms | yes | yes (its server test hasn't run yet) |
 | Java | complete | WS, process | kwik (`channel-java-quic`) | no | yes | not yet |
 | Kotlin | complete | WS, process | kwik (`channel-kotlin-quic`) | no | yes | not yet |
-| PHP | complete | WS, process | none | yes | no | yes |
+| PHP | complete | WS, process | OpenSSL 3.5 via `ext-ffi` (optional) | yes | no | yes |
 | Python | complete | WS, process | aioquic (extra `quic`) | yes | yes | yes |
-| Ruby | complete | WS, process | none | yes | no | yes |
+| Ruby | complete | WS, process | OpenSSL 3.5 via `fiddle` (`channel_rb/quic`) | yes | no | yes |
 | Rust | complete | WS, process | quinn (feature `quic`) | no | yes | not yet |
 | Swift | complete, frozen | WS client only | Network.framework, client only | yes, backoff 100 ms to 5 s | yes | yes |
 | Zig | complete | WS, process | OpenSSL 3.5 (`-Dquic=true`) | no | yes | not yet |
@@ -64,7 +64,8 @@ Notes:
 - Swift has no listening server. The Swift server is `ChannelServer`, a separate library in HubServer
   ([v57/HubServer](https://github.com/v57/HubServer)), which also serves QUIC. See
   [ChannelSwift's docs](https://github.com/v57/ChannelSwift/blob/main/docs/ChannelSwift.md).
-- Dart, PHP and Ruby have no usable QUIC library and stay on WebSocket.
+- Dart, PHP and Ruby have no QUIC library of their own: they call OpenSSL 3.5's native QUIC through their FFI
+  (`dart:ffi`, `ext-ffi`, `fiddle`), as C and Zig do.
 - Each port's README has its usage, dependencies and notes on where it differs.
 
 ## Testing a port
